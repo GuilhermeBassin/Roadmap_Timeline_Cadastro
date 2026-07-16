@@ -370,7 +370,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
     >
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold leading-snug text-white flex-1" style={{ fontFamily: "Inter, sans-serif" }}>
+        <p className="text-sm font-semibold leading-snug flex-1" style={{ color: "#1E293B", fontFamily: "Inter, sans-serif" }}>
           {project.title}
         </p>
         <button
