@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 import {
   Plus, ChevronRight, AlertTriangle, Trash2, Edit3,
   LayoutGrid, BarChart3, Search, X, Calendar,
@@ -14,7 +15,10 @@ import {
 
 type Status = "discovery" | "backlog" | "dev" | "homolog" | "done" | "blocked";
 type Category = "Validação" | "Documentos" | "Onboarding" | "Atualização Cadastral" | "Integrações";
-type Quarter = "Q1 2026" | "Q2 2026" | "Q3 2026" | "Q4 2026" | "Q1 2027" | "Q2 2027";
+type Quarter =
+  | "Q1 2025" | "Q2 2025" | "Q3 2025" | "Q4 2025"
+  | "Q1 2026" | "Q2 2026" | "Q3 2026" | "Q4 2026"
+  | "Q1 2027" | "Q2 2027";
 type View = "roadmap" | "timeline" | "dashboard";
 
 interface Project {
@@ -55,7 +59,11 @@ const NEXT_STATUS: Partial<Record<Status, Status>> = {
 };
 
 const KANBAN_COLS: Status[] = ["discovery", "backlog", "dev", "homolog", "done", "blocked"];
-const QUARTERS: Quarter[] = ["Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025", "Q1 2026", "Q2 2026"];
+const QUARTERS: Quarter[] = [
+  "Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025",
+  "Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026",
+  "Q1 2027", "Q2 2027",
+];
 const CATEGORIES: Category[] = ["Validação", "Documentos", "Onboarding", "Atualização Cadastral", "Integrações"];
 
 const CAT_COLOR: Record<Category, string> = {
@@ -66,12 +74,96 @@ const CAT_COLOR: Record<Category, string> = {
   "Integrações":           "#F472B6",
 };
 
-const OWNERS = [
-  { name: "Guilherme Bassin",  initials: "GB", color: "#6366F1" },
-  { name: "Juliana Genova", initials: "JG", color: "#EC4899" },
-  { name: "Pedro Gabriel Silva",   initials: "PG", color: "#14B8A6" },
-  
+interface Owner {
+  id: string | null;
+  name: string;
+  initials: string;
+  color: string;
+}
+
+const OWNER_PALETTE = ["#6366F1", "#EC4899", "#14B8A6", "#F59E0B", "#8B5CF6", "#38BDF8", "#F472B6", "#34D399"];
+
+const DEFAULT_OWNERS: Owner[] = [
+  { id: null, name: "Guilherme Bassin",   initials: "GB", color: "#6366F1" },
+  { id: null, name: "Juliana Genova",     initials: "JG", color: "#EC4899" },
+  { id: null, name: "Pedro Gabriel Silva", initials: "PG", color: "#14B8A6" },
 ];
+
+// ─── Supabase ────────────────────────────────────────────────────────────────
+
+const SUPABASE_URL =
+  (import.meta as any).env?.VITE_SUPABASE_URL ?? "https://hrfcmlqhgxzwjhnwawvc.supabase.co";
+// Chave publicável (publishable/anon) — segura para uso no browser com RLS ativado.
+const SUPABASE_ANON_KEY =
+  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ??
+  "sb_publishable_vu9hGerEQY1IMrZ-kNpOBQ_AH_okmx3";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const STATUS_ALIASES: Record<string, Status> = {
+  "discovery": "discovery",
+  "backlog": "backlog",
+  "dev": "dev",
+  "em desenvolvimento": "dev",
+  "homolog": "homolog",
+  "em homologação": "homolog",
+  "done": "done",
+  "concluído": "done",
+  "concluido": "done",
+  "blocked": "blocked",
+  "bloqueado": "blocked",
+};
+
+function normalizeStatus(s: string | null): Status {
+  if (!s) return "discovery";
+  return STATUS_ALIASES[s.trim().toLowerCase()] ?? "discovery";
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase() || "??";
+}
+
+function rowToProject(row: any, owners: Owner[]): Project {
+  const owner = owners.find(o => o.id === row.owner_id);
+  return {
+    id: row.id,
+    title: row.nome ?? "",
+    category: (row.categoria as Category) ?? "Validação",
+    status: normalizeStatus(row.status),
+    quarter: (row.quarter_entrega as Quarter) ?? "Q1 2026",
+    progress: row.progresso ?? 0,
+    startDate: row.data_inicio ?? "",
+    endDate: row.data_previsao ?? "",
+    owner: owner?.name ?? "—",
+    ownerInitials: owner?.initials ?? "??",
+    ownerColor: owner?.color ?? "#6366F1",
+    epicJira: row.epico_jira ?? "",
+    description: row.descricao ?? "",
+    tags: row.tags ?? [],
+    hasDependencies: row.possui_dependencias ?? false,
+    blockedReason: row.mensagem_alerta ?? undefined,
+  };
+}
+
+function projectToRow(p: Partial<Project>, owners: Owner[]) {
+  const owner = owners.find(o => o.name === p.owner);
+  return {
+    nome: p.title ?? "",
+    descricao: p.description ?? "",
+    categoria: p.category ?? "Validação",
+    quarter_entrega: p.quarter ?? "Q1 2026",
+    status: p.status ?? "discovery",
+    owner_id: owner?.id ?? null,
+    data_inicio: p.startDate || null,
+    data_previsao: p.endDate || null,
+    epico_jira: p.epicJira ?? "",
+    progresso: p.progress ?? 0,
+    possui_dependencias: p.hasDependencies ?? false,
+    tags: p.tags ?? [],
+    mensagem_alerta: p.blockedReason ?? null,
+  };
+}
 
 const MONTHS_PT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
@@ -767,20 +859,22 @@ interface ModalProps {
   onClose: () => void;
   onSave: (data: Partial<Project>) => void;
   initial?: Project;
+  owners: Owner[];
 }
 
-function ProjectModal({ onClose, onSave, initial }: ModalProps) {
+function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
+  const OWNERS = owners.length > 0 ? owners : DEFAULT_OWNERS;
   const [form, setForm] = useState({
     title: initial?.title ?? "",
     description: initial?.description ?? "",
     category: initial?.category ?? "Validação" as Category,
-    quarter: initial?.quarter ?? "Q2 2025" as Quarter,
+    quarter: initial?.quarter ?? "Q3 2026" as Quarter,
     status: initial?.status ?? "discovery" as Status,
     progress: initial?.progress ?? 0,
-    startDate: initial?.startDate ?? "2025-07-01",
-    endDate: initial?.endDate ?? "2025-09-30",
+    startDate: initial?.startDate ?? "2026-07-01",
+    endDate: initial?.endDate ?? "2026-09-30",
     epicJira: initial?.epicJira ?? "",
-    owner: initial?.owner ?? "Lucas Ferreira",
+    owner: initial?.owner ?? (owners[0]?.name ?? "Guilherme Bassin"),
     hasDependencies: initial?.hasDependencies ?? false,
   });
 
@@ -1007,7 +1101,42 @@ function BlockModal({ project, onClose, onBlock }: { project: Project; onClose: 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [projects, setProjects] = useState<Project[]>(INITIAL);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: users, error: uErr } = await supabase
+          .from("usuarios").select("*").order("created_at", { ascending: true });
+        if (uErr) throw uErr;
+        const loadedOwners: Owner[] = (users ?? []).map((u: any, i: number) => ({
+          id: u.id,
+          name: u.nome,
+          initials: u.iniciais || initialsOf(u.nome),
+          color: OWNER_PALETTE[i % OWNER_PALETTE.length],
+        }));
+        const { data: rows, error: pErr } = await supabase
+          .from("projetos").select("*").order("created_at", { ascending: true });
+        if (pErr) throw pErr;
+        setOwners(loadedOwners);
+        setProjects((rows ?? []).map((r: any) => rowToProject(r, loadedOwners)));
+        setLoadError(null);
+      } catch (e: any) {
+        console.error("Erro ao carregar dados do Supabase:", e);
+        setLoadError(e?.message ?? "Erro ao conectar ao banco de dados");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function persistUpdate(id: string, fields: Record<string, any>) {
+    const { error } = await supabase.from("projetos").update(fields).eq("id", id);
+    if (error) console.error("Erro ao salvar no Supabase:", error);
+  }
   const [view, setView] = useState<View>("roadmap");
   const [search, setSearch] = useState("");
   const [filterQuarter, setFilterQuarter] = useState("all");
@@ -1024,46 +1153,44 @@ export default function App() {
 
   function moveProject(id: string, status: Status) {
     setProjects(ps => ps.map(p => p.id === id ? { ...p, status } : p));
+    persistUpdate(id, { status });
   }
 
   function unblockProject(id: string) {
     setProjects(ps => ps.map(p => p.id === id ? { ...p, status: "dev", blockedReason: undefined } : p));
+    persistUpdate(id, { status: "dev", mensagem_alerta: null });
   }
 
   function deleteProject(id: string) {
     setProjects(ps => ps.filter(p => p.id !== id));
+    supabase.from("projetos").delete().eq("id", id)
+      .then(({ error }) => { if (error) console.error("Erro ao excluir no Supabase:", error); });
   }
 
-  function saveProject(data: Partial<Project>) {
+  async function saveProject(data: Partial<Project>) {
     if (editProject) {
-      setProjects(ps => ps.map(p => p.id === editProject.id ? { ...p, ...data } : p));
+      const merged = { ...editProject, ...data };
+      setProjects(ps => ps.map(p => p.id === editProject.id ? merged : p));
       setEditProject(null);
+      persistUpdate(editProject.id, projectToRow(merged, owners));
     } else {
-      const newP: Project = {
-        id: uid(),
-        title: data.title ?? "",
-        category: data.category ?? "Validação",
-        status: data.status ?? "discovery",
-        quarter: data.quarter ?? "Q2 2025",
-        progress: data.progress ?? 0,
-        startDate: data.startDate ?? "2025-07-01",
-        endDate: data.endDate ?? "2025-09-30",
-        owner: data.owner ?? "",
-        ownerInitials: data.ownerInitials ?? "??",
-        ownerColor: data.ownerColor ?? "#6366F1",
-        epicJira: data.epicJira ?? "",
-        description: data.description ?? "",
-        tags: [],
-        hasDependencies: data.hasDependencies ?? false,
-      };
-      setProjects(ps => [newP, ...ps]);
       setCreateOpen(false);
+      const row = projectToRow({ ...data, tags: data.tags ?? [] }, owners);
+      const { data: inserted, error } = await supabase
+        .from("projetos").insert(row).select().single();
+      if (error || !inserted) {
+        console.error("Erro ao criar projeto no Supabase:", error);
+        alert("Erro ao salvar o projeto no banco de dados. Tente novamente.");
+        return;
+      }
+      setProjects(ps => [...ps, rowToProject(inserted, owners)]);
     }
   }
 
   function blockConfirm(id: string, reason: string) {
     setProjects(ps => ps.map(p => p.id === id ? { ...p, status: "blocked", blockedReason: reason } : p));
     setBlockProject(null);
+    persistUpdate(id, { status: "blocked", mensagem_alerta: reason });
   }
 
   const blockedCount = projects.filter(p => p.status === "blocked").length;
@@ -1178,6 +1305,18 @@ export default function App() {
         </div>
       )}
 
+      {/* Loading / error banners */}
+      {loading && (
+        <div className="px-6 py-2 text-xs" style={{ color: "#94A3B8", background: "rgba(99,102,241,0.08)", borderBottom: "1px solid rgba(99,102,241,0.2)" }}>
+          Carregando projetos do banco de dados…
+        </div>
+      )}
+      {loadError && (
+        <div className="px-6 py-2 text-xs" style={{ color: "#EF4444", background: "rgba(239,68,68,0.08)", borderBottom: "1px solid rgba(239,68,68,0.2)" }}>
+          Erro ao conectar ao banco de dados: {loadError}
+        </div>
+      )}
+
       {/* Main content */}
       <main className="flex-1 overflow-hidden px-6 pt-5">
         {view === "roadmap" && (
@@ -1208,10 +1347,10 @@ export default function App() {
 
       {/* Modals */}
       {createOpen && (
-        <ProjectModal onClose={() => setCreateOpen(false)} onSave={saveProject} />
+        <ProjectModal onClose={() => setCreateOpen(false)} onSave={saveProject} owners={owners} />
       )}
       {editProject && (
-        <ProjectModal onClose={() => setEditProject(null)} onSave={saveProject} initial={editProject} />
+        <ProjectModal onClose={() => setEditProject(null)} onSave={saveProject} initial={editProject} owners={owners} />
       )}
       {blockProject && (
         <BlockModal project={blockProject} onClose={() => setBlockProject(null)} onBlock={blockConfirm} />
