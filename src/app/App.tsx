@@ -44,10 +44,10 @@ interface Project {
 
 const SC: Record<Status, { label: string; color: string; bg: string; border: string }> = {
   discovery: { label: "Discovery",         color: "#9333EA", bg: "rgba(147,51,234,0.14)",  border: "rgba(147,51,234,0.35)" },
-  backlog:   { label: "Backlog",           color: "#60A5FA", bg: "rgba(96,165,250,0.14)",  border: "rgba(96,165,250,0.35)" },
-  dev:       { label: "Em Desenvolvimento",color: "#FB923C", bg: "rgba(251,146,60,0.14)",  border: "rgba(251,146,60,0.35)" },
-  homolog:   { label: "Em Homologação",    color: "#FBBF24", bg: "rgba(251,191,36,0.14)",  border: "rgba(251,191,36,0.35)" },
-  done:      { label: "Concluído",         color: "#34D399", bg: "rgba(52,211,153,0.14)",  border: "rgba(52,211,153,0.35)" },
+  backlog:   { label: "Backlog",           color: "#3B82F6", bg: "rgba(96,165,250,0.14)",  border: "rgba(96,165,250,0.35)" },
+  dev:       { label: "Em Desenvolvimento",color: "#EA580C", bg: "rgba(251,146,60,0.14)",  border: "rgba(251,146,60,0.35)" },
+  homolog:   { label: "Em Homologação",    color: "#D97706", bg: "rgba(251,191,36,0.14)",  border: "rgba(251,191,36,0.35)" },
+  done:      { label: "Concluído",         color: "#10B981", bg: "rgba(52,211,153,0.14)",  border: "rgba(52,211,153,0.35)" },
   blocked:   { label: "Bloqueado",         color: "#EF4444", bg: "rgba(239,68,68,0.14)",   border: "rgba(239,68,68,0.35)" },
 };
 
@@ -67,11 +67,11 @@ const QUARTERS: Quarter[] = [
 const CATEGORIES: Category[] = ["Validação", "Documentos", "Onboarding", "Atualização Cadastral", "Integrações"];
 
 const CAT_COLOR: Record<Category, string> = {
-  "Validação":             "#A78BFA",
-  "Documentos":            "#38BDF8",
-  "Onboarding":            "#34D399",
-  "Atualização Cadastral": "#FB923C",
-  "Integrações":           "#F472B6",
+  "Validação":             "#7C3AED",
+  "Documentos":            "#0284C7",
+  "Onboarding":            "#10B981",
+  "Atualização Cadastral": "#EA580C",
+  "Integrações":           "#DB2777",
 };
 
 interface Owner {
@@ -81,12 +81,12 @@ interface Owner {
   color: string;
 }
 
-const OWNER_PALETTE = ["#6366F1", "#EC4899", "#14B8A6", "#F59E0B", "#8B5CF6", "#38BDF8", "#F472B6", "#34D399"];
+const OWNER_PALETTE = ["#6366F1", "#EC4899", "#0D9488", "#D97706", "#8B5CF6", "#0284C7", "#DB2777", "#10B981"];
 
 const DEFAULT_OWNERS: Owner[] = [
   { id: null, name: "Guilherme Bassin",   initials: "GB", color: "#6366F1" },
   { id: null, name: "Juliana Genova",     initials: "JG", color: "#EC4899" },
-  { id: null, name: "Pedro Gabriel Silva", initials: "PG", color: "#14B8A6" },
+  { id: null, name: "Pedro Gabriel Silva", initials: "PG", color: "#0D9488" },
 ];
 
 // ─── Supabase ────────────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ const INITIAL: Project[] = [
     id: "3", title: "Integração Bureau de Crédito Externo",
     category: "Integrações", status: "discovery", quarter: "Q3 2025",
     progress: 15, startDate: "2025-07-01", endDate: "2025-09-30",
-    owner: "Rafael Mendes", ownerInitials: "RM", ownerColor: "#14B8A6",
+    owner: "Rafael Mendes", ownerInitials: "RM", ownerColor: "#0D9488",
     epicJira: "",
     description: "Discovery para integração com bureau de crédito externo.",
     tags: ["bureau", "crédito"], hasDependencies: false,
@@ -201,7 +201,7 @@ const INITIAL: Project[] = [
     id: "4", title: "Onboarding Digital Completo PJ",
     category: "Onboarding", status: "backlog", quarter: "Q2 2025",
     progress: 5, startDate: "2025-04-15", endDate: "2025-06-15",
-    owner: "Camila Santos", ownerInitials: "CS", ownerColor: "#F59E0B",
+    owner: "Camila Santos", ownerInitials: "CS", ownerColor: "#D97706",
     epicJira: "CAD-3180",
     description: "Novo fluxo de onboarding digital completo para pessoas jurídicas.",
     tags: ["PJ", "onboarding"], hasDependencies: true,
@@ -228,7 +228,7 @@ const INITIAL: Project[] = [
     id: "7", title: "Integração Receita Federal",
     category: "Integrações", status: "done", quarter: "Q1 2025",
     progress: 100, startDate: "2025-01-05", endDate: "2025-02-28",
-    owner: "Rafael Mendes", ownerInitials: "RM", ownerColor: "#14B8A6",
+    owner: "Rafael Mendes", ownerInitials: "RM", ownerColor: "#0D9488",
     epicJira: "CAD-2750",
     description: "Integração com Receita Federal para consulta de CPF/CNPJ.",
     tags: ["Receita Federal"], hasDependencies: false,
@@ -247,7 +247,7 @@ const INITIAL: Project[] = [
     id: "9", title: "Portal Self-Service Cadastral",
     category: "Atualização Cadastral", status: "backlog", quarter: "Q3 2025",
     progress: 0, startDate: "2025-07-15", endDate: "2025-09-30",
-    owner: "Camila Santos", ownerInitials: "CS", ownerColor: "#F59E0B",
+    owner: "Camila Santos", ownerInitials: "CS", ownerColor: "#D97706",
     epicJira: "",
     description: "Portal para clientes atualizarem dados cadastrais de forma autônoma.",
     tags: ["self-service", "portal"], hasDependencies: false,
@@ -326,7 +326,7 @@ function CategoryTag({ category }: { category: Category }) {
 
 function ProgressBar({ value, color }: { value: number; color: string }) {
   return (
-    <div className="relative h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+    <div className="relative h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(15,23,42,0.08)" }}>
       <div
         className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
         style={{ width: `${value}%`, background: color }}
@@ -362,9 +362,9 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
       onMouseLeave={() => { setHovered(false); setMenuOpen(false); }}
       className="relative rounded-xl p-3.5 flex flex-col gap-2.5 cursor-grab active:cursor-grabbing select-none transition-all duration-200"
       style={{
-        background: "#0F1729",
-        border: `1px solid ${hovered ? cfg.border : "rgba(255,255,255,0.07)"}`,
-        boxShadow: hovered ? `0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px ${cfg.border}` : "0 2px 8px rgba(0,0,0,0.2)",
+        background: "#FFFFFF",
+        border: `1px solid ${hovered ? cfg.border : "rgba(15,23,42,0.07)"}`,
+        boxShadow: hovered ? `0 4px 24px rgba(15,23,42,0.10), 0 0 0 1px ${cfg.border}` : "0 2px 8px rgba(15,23,42,0.06)",
         transform: hovered ? "translateY(-1px)" : "none",
       }}
     >
@@ -376,7 +376,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
         <button
           onClick={() => setMenuOpen(v => !v)}
           className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md transition-colors"
-          style={{ color: "#64748B", background: menuOpen ? "rgba(255,255,255,0.08)" : "transparent" }}
+          style={{ color: "#64748B", background: menuOpen ? "rgba(15,23,42,0.08)" : "transparent" }}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
             <circle cx="7" cy="2" r="1.2"/><circle cx="7" cy="7" r="1.2"/><circle cx="7" cy="12" r="1.2"/>
@@ -404,7 +404,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
       {project.status === "blocked" && project.blockedReason && (
         <div className="flex items-start gap-1.5 rounded-lg p-2" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
           <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" style={{ color: "#EF4444" }} />
-          <span className="text-xs leading-relaxed" style={{ color: "#FCA5A5" }}>{project.blockedReason}</span>
+          <span className="text-xs leading-relaxed" style={{ color: "#DC2626" }}>{project.blockedReason}</span>
         </div>
       )}
 
@@ -413,7 +413,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
         <div className="flex items-center gap-2">
           <Avatar initials={project.ownerInitials} color={project.ownerColor} size={22} />
           {project.epicJira && (
-            <span className="text-xs font-medium" style={{ color: "#475569", fontFamily: "JetBrains Mono, monospace" }}>
+            <span className="text-xs font-medium" style={{ color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
               {project.epicJira}
             </span>
           )}
@@ -421,10 +421,10 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
         <div className="flex items-center gap-1.5">
           {project.hasDependencies && (
             <span title="Possui dependências">
-              <Link2 size={11} style={{ color: "#FBBF24" }} />
+              <Link2 size={11} style={{ color: "#D97706" }} />
             </span>
           )}
-          <span className="text-xs" style={{ color: "#475569", fontFamily: "JetBrains Mono, monospace" }}>
+          <span className="text-xs" style={{ color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
             {fmtDate(project.endDate)}
           </span>
         </div>
@@ -434,7 +434,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
       {project.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {project.tags.slice(0, 3).map(t => (
-            <span key={t} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.05)", color: "#94A3B8" }}>
+            <span key={t} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(15,23,42,0.05)", color: "#64748B" }}>
               #{t}
             </span>
           ))}
@@ -443,7 +443,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
 
       {/* Quarter badge */}
       <div className="flex items-center justify-between">
-        <span className="text-xs" style={{ color: "#334155", fontFamily: "JetBrains Mono, monospace" }}>
+        <span className="text-xs" style={{ color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
           {project.quarter}
         </span>
         {/* Action buttons - visible on hover */}
@@ -452,7 +452,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
             <button
               onClick={() => onUnblock(project.id)}
               className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
-              style={{ background: "rgba(52,211,153,0.12)", color: "#34D399", border: "1px solid rgba(52,211,153,0.25)" }}
+              style={{ background: "rgba(52,211,153,0.12)", color: "#10B981", border: "1px solid rgba(52,211,153,0.25)" }}
               title="Desbloquear"
             >
               <RotateCcw size={10} />
@@ -476,11 +476,11 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
       {menuOpen && (
         <div
           className="absolute right-2 top-10 z-30 rounded-xl py-1 min-w-[160px]"
-          style={{ background: "#131F35", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}
+          style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.1)", boxShadow: "0 8px 32px rgba(15,23,42,0.12)" }}
         >
           <MenuItem icon={<Edit3 size={12} />} label="Editar" onClick={() => { setMenuOpen(false); onEdit(project); }} />
           {project.status !== "blocked" && (
-            <MenuItem icon={<AlertTriangle size={12} />} label="Bloquear" onClick={() => { setMenuOpen(false); onBlock(project); }} color="#FBBF24" />
+            <MenuItem icon={<AlertTriangle size={12} />} label="Bloquear" onClick={() => { setMenuOpen(false); onBlock(project); }} color="#D97706" />
           )}
           <MenuItem icon={<Trash2 size={12} />} label="Excluir" onClick={() => { setMenuOpen(false); onDelete(project.id); }} color="#EF4444" />
         </div>
@@ -494,7 +494,7 @@ function MenuItem({ icon, label, onClick, color }: { icon: React.ReactNode; labe
     <button
       onClick={onClick}
       className="flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors text-left hover:bg-white/5"
-      style={{ color: color ?? "#94A3B8" }}
+      style={{ color: color ?? "#64748B" }}
     >
       {icon} {label}
     </button>
@@ -538,8 +538,8 @@ function RoadmapView({
             className="flex-shrink-0 flex flex-col rounded-xl"
             style={{
               width: 288,
-              background: "#0B1220",
-              border: `1px solid ${isTarget ? cfg.color : "rgba(255,255,255,0.06)"}`,
+              background: "#F8FAFC",
+              border: `1px solid ${isTarget ? cfg.color : "rgba(15,23,42,0.06)"}`,
               boxShadow: isTarget ? `0 0 0 1px ${cfg.color}, 0 0 24px ${cfg.bg}` : "none",
               transition: "all 0.15s ease",
             }}
@@ -551,7 +551,7 @@ function RoadmapView({
             }}
           >
             {/* Column header */}
-            <div className="px-4 py-3 flex items-center justify-between border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            <div className="px-4 py-3 flex items-center justify-between border-b" style={{ borderColor: "rgba(15,23,42,0.06)" }}>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }} />
                 <span className="text-sm font-semibold" style={{ color: cfg.color, fontFamily: "Inter, sans-serif" }}>
@@ -578,7 +578,7 @@ function RoadmapView({
               {cards.length === 0 && (
                 <div
                   className="flex items-center justify-center h-24 rounded-xl text-xs"
-                  style={{ border: "1px dashed rgba(255,255,255,0.08)", color: "#334155" }}
+                  style={{ border: "1px dashed rgba(15,23,42,0.08)", color: "#94A3B8" }}
                 >
                   Arraste um card aqui
                 </div>
@@ -621,18 +621,18 @@ function TimelineView({ projects }: { projects: Project[] }) {
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "Inter, sans-serif" }}>
       {/* Quarter labels */}
-      <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.07)", paddingLeft: 220 }}>
+      <div className="flex border-b" style={{ borderColor: "rgba(15,23,42,0.07)", paddingLeft: 220 }}>
         {["Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025"].map((q, i) => (
-          <div key={q} className="flex-1 text-center text-xs font-semibold py-2" style={{ color: "#475569" }}>
+          <div key={q} className="flex-1 text-center text-xs font-semibold py-2" style={{ color: "#94A3B8" }}>
             {q}
           </div>
         ))}
       </div>
 
       {/* Month labels */}
-      <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.05)", paddingLeft: 220 }}>
+      <div className="flex border-b" style={{ borderColor: "rgba(15,23,42,0.05)", paddingLeft: 220 }}>
         {MONTHS_PT.map((m, i) => (
-          <div key={m} className="flex-1 text-center py-1.5" style={{ fontSize: 10, color: "#334155", fontFamily: "JetBrains Mono, monospace" }}>
+          <div key={m} className="flex-1 text-center py-1.5" style={{ fontSize: 10, color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
             {m}
           </div>
         ))}
@@ -650,13 +650,13 @@ function TimelineView({ projects }: { projects: Project[] }) {
             <div
               key={p.id}
               className="flex items-center border-b hover:bg-white/[0.02] transition-colors"
-              style={{ borderColor: "rgba(255,255,255,0.04)", minHeight: 56 }}
+              style={{ borderColor: "rgba(15,23,42,0.04)", minHeight: 56 }}
             >
               {/* Project info */}
               <div className="flex-shrink-0 flex items-center gap-2.5 pr-4 pl-3" style={{ width: 220 }}>
                 <Avatar initials={p.ownerInitials} color={p.ownerColor} size={22} />
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "#CBD5E1", maxWidth: 155 }}>{p.title}</p>
+                  <p className="text-xs font-semibold truncate" style={{ color: "#475569", maxWidth: 155 }}>{p.title}</p>
                   <StatusBadge status={p.status} />
                 </div>
               </div>
@@ -668,7 +668,7 @@ function TimelineView({ projects }: { projects: Project[] }) {
                   <div
                     key={i}
                     className="absolute top-0 bottom-0"
-                    style={{ left: `${(i / TOTAL_MONTHS) * 100}%`, width: 1, background: "rgba(255,255,255,0.035)" }}
+                    style={{ left: `${(i / TOTAL_MONTHS) * 100}%`, width: 1, background: "rgba(15,23,42,0.035)" }}
                   />
                 ))}
 
@@ -694,7 +694,7 @@ function TimelineView({ projects }: { projects: Project[] }) {
                     {p.progress}%
                   </span>
                   {p.hasDependencies && (
-                    <Link2 size={9} className="relative ml-1 flex-shrink-0" style={{ color: "#FBBF24" }} />
+                    <Link2 size={9} className="relative ml-1 flex-shrink-0" style={{ color: "#D97706" }} />
                   )}
                 </div>
 
@@ -706,7 +706,7 @@ function TimelineView({ projects }: { projects: Project[] }) {
                     transform: "translateY(-50%) rotate(45deg)",
                     width: 10, height: 10,
                     background: cfg.color,
-                    border: "2px solid #080E1C",
+                    border: "2px solid #F4F6FB",
                     borderRadius: 2,
                   }}
                   title="Go-live previsto"
@@ -744,11 +744,11 @@ function DashboardView({ projects }: { projects: Project[] }) {
 
   const metricCards = [
     { label: "Total de Projetos", value: total, icon: <Target size={18} />, color: "#6366F1" },
-    { label: "Em Desenvolvimento", value: inDev, icon: <Activity size={18} />, color: "#FB923C" },
-    { label: "Concluídos",         value: done,    icon: <CheckCircle2 size={18} />, color: "#34D399" },
+    { label: "Em Desenvolvimento", value: inDev, icon: <Activity size={18} />, color: "#EA580C" },
+    { label: "Concluídos",         value: done,    icon: <CheckCircle2 size={18} />, color: "#10B981" },
     { label: "Bloqueados",         value: blocked, icon: <AlertCircle size={18} />, color: "#EF4444" },
-    { label: "Taxa de Conclusão",  value: `${completion}%`, icon: <TrendingUp size={18} />, color: "#FBBF24" },
-    { label: "Sem Owner",          value: noOwner, icon: <Users size={18} />, color: noOwner > 0 ? "#EF4444" : "#34D399" },
+    { label: "Taxa de Conclusão",  value: `${completion}%`, icon: <TrendingUp size={18} />, color: "#D97706" },
+    { label: "Sem Owner",          value: noOwner, icon: <Users size={18} />, color: noOwner > 0 ? "#EF4444" : "#10B981" },
   ];
 
   return (
@@ -759,37 +759,37 @@ function DashboardView({ projects }: { projects: Project[] }) {
           <div
             key={m.label}
             className="rounded-xl p-4 flex flex-col gap-3"
-            style={{ background: "#0F1729", border: "1px solid rgba(255,255,255,0.07)" }}
+            style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.07)" }}
           >
             <div className="flex items-center justify-between">
               <span className="text-xs" style={{ color: "#64748B" }}>{m.label}</span>
               <span style={{ color: m.color }}>{m.icon}</span>
             </div>
-            <span className="text-2xl font-bold" style={{ color: "#E2E8F0", fontFamily: "Inter, sans-serif" }}>{m.value}</span>
+            <span className="text-2xl font-bold" style={{ color: "#1E293B", fontFamily: "Inter, sans-serif" }}>{m.value}</span>
             <div className="h-px" style={{ background: `${m.color}22` }} />
           </div>
         ))}
       </div>
 
       {/* Chart */}
-      <div className="rounded-xl p-5" style={{ background: "#0F1729", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <h3 className="text-sm font-semibold mb-4" style={{ color: "#CBD5E1", fontFamily: "Inter, sans-serif" }}>
+      <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.07)" }}>
+        <h3 className="text-sm font-semibold mb-4" style={{ color: "#475569", fontFamily: "Inter, sans-serif" }}>
           Projetos por Status
         </h3>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={chartData} barCategoryGap="30%">
             <XAxis
               dataKey="name"
-              tick={{ fill: "#475569", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
+              tick={{ fill: "#94A3B8", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
               axisLine={false} tickLine={false}
             />
             <YAxis
-              tick={{ fill: "#475569", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
+              tick={{ fill: "#94A3B8", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
               axisLine={false} tickLine={false} allowDecimals={false}
             />
             <Tooltip
-              contentStyle={{ background: "#131F35", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, color: "#E2E8F0", fontSize: 12 }}
-              cursor={{ fill: "rgba(255,255,255,0.03)" }}
+              contentStyle={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.1)", borderRadius: 8, color: "#1E293B", fontSize: 12 }}
+              cursor={{ fill: "rgba(15,23,42,0.03)" }}
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {chartData.map((entry, i) => (
@@ -803,10 +803,10 @@ function DashboardView({ projects }: { projects: Project[] }) {
       {/* Right column: risk + upcoming */}
       <div className="flex flex-col gap-4">
         {/* At risk */}
-        <div className="rounded-xl p-5" style={{ background: "#0F1729", border: "1px solid rgba(239,68,68,0.2)" }}>
+        <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid rgba(239,68,68,0.2)" }}>
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle size={14} style={{ color: "#EF4444" }} />
-            <h3 className="text-sm font-semibold" style={{ color: "#CBD5E1", fontFamily: "Inter, sans-serif" }}>
+            <h3 className="text-sm font-semibold" style={{ color: "#475569", fontFamily: "Inter, sans-serif" }}>
               Projetos em Risco
             </h3>
             <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(239,68,68,0.15)", color: "#EF4444" }}>
@@ -815,12 +815,12 @@ function DashboardView({ projects }: { projects: Project[] }) {
           </div>
           <div className="flex flex-col gap-2">
             {atRisk.length === 0 ? (
-              <p className="text-xs text-center py-4" style={{ color: "#475569" }}>Nenhum projeto em risco</p>
+              <p className="text-xs text-center py-4" style={{ color: "#94A3B8" }}>Nenhum projeto em risco</p>
             ) : atRisk.map(p => (
               <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
                 <Avatar initials={p.ownerInitials} color={p.ownerColor} size={26} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate" style={{ color: "#CBD5E1" }}>{p.title}</p>
+                  <p className="text-xs font-medium truncate" style={{ color: "#475569" }}>{p.title}</p>
                   <StatusBadge status={p.status} />
                 </div>
                 <span className="text-xs font-mono" style={{ color: "#EF4444", flexShrink: 0 }}>{p.progress}%</span>
@@ -830,20 +830,20 @@ function DashboardView({ projects }: { projects: Project[] }) {
         </div>
 
         {/* Upcoming go-lives */}
-        <div className="rounded-xl p-5 flex-1" style={{ background: "#0F1729", border: "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="rounded-xl p-5 flex-1" style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.07)" }}>
           <div className="flex items-center gap-2 mb-4">
-            <Clock size={14} style={{ color: "#34D399" }} />
-            <h3 className="text-sm font-semibold" style={{ color: "#CBD5E1", fontFamily: "Inter, sans-serif" }}>
+            <Clock size={14} style={{ color: "#10B981" }} />
+            <h3 className="text-sm font-semibold" style={{ color: "#475569", fontFamily: "Inter, sans-serif" }}>
               Próximos Go-lives
             </h3>
           </div>
           <div className="flex flex-col gap-2">
             {upcoming.map((p, i) => (
               <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg transition-colors hover:bg-white/[0.03]">
-                <span className="text-xs font-mono w-4 text-center" style={{ color: "#334155" }}>{i + 1}</span>
+                <span className="text-xs font-mono w-4 text-center" style={{ color: "#94A3B8" }}>{i + 1}</span>
                 <CategoryTag category={p.category} />
-                <p className="text-xs flex-1 truncate" style={{ color: "#94A3B8" }}>{p.title}</p>
-                <span className="text-xs font-mono flex-shrink-0" style={{ color: "#FBBF24" }}>{fmtDate(p.endDate)}</span>
+                <p className="text-xs flex-1 truncate" style={{ color: "#64748B" }}>{p.title}</p>
+                <span className="text-xs font-mono flex-shrink-0" style={{ color: "#D97706" }}>{fmtDate(p.endDate)}</span>
               </div>
             ))}
           </div>
@@ -890,14 +890,14 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.35)", backdropFilter: "blur(4px)" }}>
       <div
         className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl p-6 flex flex-col gap-5"
-        style={{ background: "#0F1729", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}
+        style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.1)", boxShadow: "0 24px 64px rgba(15,23,42,0.15)" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold" style={{ color: "#E2E8F0", fontFamily: "Inter, sans-serif" }}>
+          <h2 className="text-base font-bold" style={{ color: "#1E293B", fontFamily: "Inter, sans-serif" }}>
             {initial ? "Editar Projeto" : "Novo Projeto"}
           </h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors hover:bg-white/10" style={{ color: "#64748B" }}>
@@ -913,7 +913,7 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
               onChange={e => set("title", e.target.value)}
               placeholder="Ex: Validação Biométrica em Tempo Real"
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
-              style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#E2E8F0", fontFamily: "Inter, sans-serif" }}
+              style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
             />
           </Field>
 
@@ -923,7 +923,7 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
               onChange={e => set("description", e.target.value)}
               rows={2}
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none transition-all"
-              style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#E2E8F0", fontFamily: "Inter, sans-serif" }}
+              style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
             />
           </Field>
 
@@ -957,7 +957,7 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
                 value={form.startDate}
                 onChange={e => set("startDate", e.target.value)}
                 className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#E2E8F0", colorScheme: "dark" }}
+                style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", colorScheme: "dark" }}
               />
             </Field>
             <Field label="Previsão de Entrega">
@@ -966,7 +966,7 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
                 value={form.endDate}
                 onChange={e => set("endDate", e.target.value)}
                 className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#E2E8F0", colorScheme: "dark" }}
+                style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", colorScheme: "dark" }}
               />
             </Field>
           </div>
@@ -977,7 +977,7 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
               onChange={e => set("epicJira", e.target.value)}
               placeholder="CAD-XXXX"
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none font-mono"
-              style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#E2E8F0", fontFamily: "JetBrains Mono, monospace" }}
+              style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "JetBrains Mono, monospace" }}
             />
           </Field>
 
@@ -997,18 +997,18 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
               checked={form.hasDependencies}
               onChange={e => set("hasDependencies", e.target.checked)}
               className="w-4 h-4 rounded accent-yellow-400"
-              style={{ accentColor: "#FBBF24" }}
+              style={{ accentColor: "#D97706" }}
             />
-            <span className="text-sm" style={{ color: "#94A3B8" }}>Possui dependências</span>
+            <span className="text-sm" style={{ color: "#64748B" }}>Possui dependências</span>
           </label>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+        <div className="flex gap-3 pt-2 border-t" style={{ borderColor: "rgba(15,23,42,0.07)" }}>
           <button
             onClick={onClose}
             className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-colors"
-            style={{ background: "rgba(255,255,255,0.05)", color: "#94A3B8", border: "1px solid rgba(255,255,255,0.08)" }}
+            style={{ background: "rgba(15,23,42,0.05)", color: "#64748B", border: "1px solid rgba(15,23,42,0.08)" }}
           >
             Cancelar
           </button>
@@ -1046,7 +1046,7 @@ function Select({ value, onChange, options, labels }: {
       value={value}
       onChange={e => onChange(e.target.value)}
       className="w-full rounded-lg px-3 py-2.5 text-sm outline-none appearance-none"
-      style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#E2E8F0", fontFamily: "Inter, sans-serif" }}
+      style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
     >
       {options.map(o => (
         <option key={o} value={o}>{labels ? labels[o] : o}</option>
@@ -1060,14 +1060,14 @@ function Select({ value, onChange, options, labels }: {
 function BlockModal({ project, onClose, onBlock }: { project: Project; onClose: () => void; onBlock: (id: string, reason: string) => void }) {
   const [reason, setReason] = useState(project.blockedReason ?? "");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}>
-      <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-5" style={{ background: "#0F1729", border: "1px solid rgba(239,68,68,0.3)" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.35)", backdropFilter: "blur(4px)" }}>
+      <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-5" style={{ background: "#FFFFFF", border: "1px solid rgba(239,68,68,0.3)" }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(239,68,68,0.15)" }}>
             <AlertTriangle size={18} style={{ color: "#EF4444" }} />
           </div>
           <div>
-            <h2 className="text-sm font-bold" style={{ color: "#E2E8F0" }}>Marcar como Bloqueado</h2>
+            <h2 className="text-sm font-bold" style={{ color: "#1E293B" }}>Marcar como Bloqueado</h2>
             <p className="text-xs" style={{ color: "#64748B" }}>{project.title}</p>
           </div>
         </div>
@@ -1078,11 +1078,11 @@ function BlockModal({ project, onClose, onBlock }: { project: Project; onClose: 
             rows={3}
             placeholder="Ex: Aguardando definição de API externa..."
             className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none"
-            style={{ background: "#1A2540", border: "1px solid rgba(239,68,68,0.2)", color: "#E2E8F0", fontFamily: "Inter, sans-serif" }}
+            style={{ background: "#EEF2F7", border: "1px solid rgba(239,68,68,0.2)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
           />
         </Field>
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: "rgba(255,255,255,0.05)", color: "#94A3B8" }}>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium" style={{ background: "rgba(15,23,42,0.05)", color: "#64748B" }}>
             Cancelar
           </button>
           <button
@@ -1204,32 +1204,32 @@ export default function App() {
   ];
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "#080E1C", fontFamily: "Inter, sans-serif" }}>
+    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "#F4F6FB", fontFamily: "Inter, sans-serif" }}>
 
       {/* Header */}
-      <header className="flex-shrink-0 border-b px-6 py-3 flex items-center gap-4" style={{ borderColor: "rgba(255,255,255,0.07)", background: "#0A1020" }}>
+      <header className="flex-shrink-0 border-b px-6 py-3 flex items-center gap-4" style={{ borderColor: "rgba(15,23,42,0.07)", background: "#FFFFFF" }}>
         {/* Brand */}
-        <div className="flex items-center gap-3 pr-6 border-r" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+        <div className="flex items-center gap-3 pr-6 border-r" style={{ borderColor: "rgba(15,23,42,0.07)" }}>
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)" }}>
             <Target size={16} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold leading-tight" style={{ color: "#E2E8F0" }}>Squad Cadastro</p>
-            <p className="text-xs leading-tight" style={{ color: "#475569" }}>Agibank · Roadmap 2025</p>
+            <p className="text-sm font-bold leading-tight" style={{ color: "#1E293B" }}>Squad Cadastro</p>
+            <p className="text-xs leading-tight" style={{ color: "#94A3B8" }}>Agibank · Roadmap 2025</p>
           </div>
         </div>
 
         {/* View switcher */}
-        <div className="flex items-center gap-1 rounded-xl p-1" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex items-center gap-1 rounded-xl p-1" style={{ background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.06)" }}>
           {VIEWS.map(v => (
             <button
               key={v.id}
               onClick={() => setView(v.id)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
               style={{
-                background: view === v.id ? "#1A2540" : "transparent",
-                color: view === v.id ? "#E2E8F0" : "#475569",
-                border: view === v.id ? "1px solid rgba(255,255,255,0.1)" : "1px solid transparent",
+                background: view === v.id ? "#EEF2F7" : "transparent",
+                color: view === v.id ? "#1E293B" : "#94A3B8",
+                border: view === v.id ? "1px solid rgba(15,23,42,0.1)" : "1px solid transparent",
               }}
             >
               {v.icon} {v.label}
@@ -1239,8 +1239,8 @@ export default function App() {
 
         {/* Quick stats */}
         <div className="hidden lg:flex items-center gap-4 ml-2">
-          <Stat label="Em Dev" value={devCount} color="#FB923C" />
-          <Stat label="Concluídos" value={doneCount} color="#34D399" />
+          <Stat label="Em Dev" value={devCount} color="#EA580C" />
+          <Stat label="Concluídos" value={doneCount} color="#10B981" />
           {blockedCount > 0 && <Stat label="Bloqueados" value={blockedCount} color="#EF4444" pulse />}
         </div>
 
@@ -1248,13 +1248,13 @@ export default function App() {
 
         {/* Search */}
         <div className="relative hidden md:block">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#475569" }} />
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#94A3B8" }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar projeto ou épico..."
             className="pl-8 pr-3 py-2 rounded-xl text-xs outline-none w-52 transition-all focus:w-64"
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#E2E8F0" }}
+            style={{ background: "rgba(15,23,42,0.05)", border: "1px solid rgba(15,23,42,0.08)", color: "#1E293B" }}
           />
         </div>
 
@@ -1263,9 +1263,9 @@ export default function App() {
           onClick={() => setShowFilters(v => !v)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors"
           style={{
-            background: showFilters ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.05)",
-            border: `1px solid ${showFilters ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.08)"}`,
-            color: showFilters ? "#818CF8" : "#64748B",
+            background: showFilters ? "rgba(99,102,241,0.15)" : "rgba(15,23,42,0.05)",
+            border: `1px solid ${showFilters ? "rgba(99,102,241,0.4)" : "rgba(15,23,42,0.08)"}`,
+            color: showFilters ? "#6366F1" : "#64748B",
           }}
         >
           <Filter size={13} /> Filtros
@@ -1283,7 +1283,7 @@ export default function App() {
 
       {/* Filter bar */}
       {showFilters && (
-        <div className="flex-shrink-0 flex items-center gap-4 px-6 py-3 border-b" style={{ borderColor: "rgba(255,255,255,0.05)", background: "#090F1D" }}>
+        <div className="flex-shrink-0 flex items-center gap-4 px-6 py-3 border-b" style={{ borderColor: "rgba(15,23,42,0.05)", background: "#F4F6FB" }}>
           <FilterSelect label="Quarter" value={filterQuarter} onChange={setFilterQuarter} options={["all", ...QUARTERS]} labels={{ all: "Todos os Quarters" }} />
           <FilterSelect label="Categoria" value={filterCategory} onChange={setFilterCategory} options={["all", ...CATEGORIES]} labels={{ all: "Todas as Categorias" }} />
           <FilterSelect label="Status" value={filterStatus} onChange={setFilterStatus}
@@ -1299,7 +1299,7 @@ export default function App() {
               <X size={11} /> Limpar Filtros
             </button>
           )}
-          <span className="ml-auto text-xs font-mono" style={{ color: "#475569" }}>
+          <span className="ml-auto text-xs font-mono" style={{ color: "#94A3B8" }}>
             {filtered.length} de {projects.length} projetos
           </span>
         </div>
@@ -1307,7 +1307,7 @@ export default function App() {
 
       {/* Loading / error banners */}
       {loading && (
-        <div className="px-6 py-2 text-xs" style={{ color: "#94A3B8", background: "rgba(99,102,241,0.08)", borderBottom: "1px solid rgba(99,102,241,0.2)" }}>
+        <div className="px-6 py-2 text-xs" style={{ color: "#64748B", background: "rgba(99,102,241,0.08)", borderBottom: "1px solid rgba(99,102,241,0.2)" }}>
           Carregando projetos do banco de dados…
         </div>
       )}
@@ -1334,7 +1334,7 @@ export default function App() {
           />
         )}
         {view === "timeline" && (
-          <div className="h-full overflow-hidden rounded-xl" style={{ background: "#0F1729", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div className="h-full overflow-hidden rounded-xl" style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.07)" }}>
             <TimelineView projects={filtered} />
           </div>
         )}
@@ -1366,7 +1366,7 @@ function Stat({ label, value, color, pulse }: { label: string; value: number; co
     <div className="flex items-center gap-2">
       <div className={`relative w-1.5 h-1.5 rounded-full ${pulse ? "animate-ping absolute" : ""}`} style={{ background: color }} />
       {pulse && <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />}
-      <span className="text-xs" style={{ color: "#475569" }}>{label}</span>
+      <span className="text-xs" style={{ color: "#94A3B8" }}>{label}</span>
       <span className="text-sm font-bold" style={{ color }}>{value}</span>
     </div>
   );
@@ -1378,12 +1378,12 @@ function FilterSelect({ label, value, onChange, options, labels }: {
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs" style={{ color: "#475569" }}>{label}:</span>
+      <span className="text-xs" style={{ color: "#94A3B8" }}>{label}:</span>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
         className="text-xs rounded-lg px-2.5 py-1.5 outline-none appearance-none"
-        style={{ background: "#1A2540", border: "1px solid rgba(255,255,255,0.1)", color: "#CBD5E1", fontFamily: "Inter, sans-serif" }}
+        style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#475569", fontFamily: "Inter, sans-serif" }}
       >
         {options.map(o => (
           <option key={o} value={o}>{labels?.[o] ?? o}</option>
