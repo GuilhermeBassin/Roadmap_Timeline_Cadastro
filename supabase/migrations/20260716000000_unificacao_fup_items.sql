@@ -1,6 +1,8 @@
 -- ============================================================================
--- UNIFICAÇÃO DO DASH — Base única de projetos (fonte de verdade: Controle de Demandas)
--- Executar no SQL Editor do Supabase do CONTROLE DE DEMANDAS (projeto mmzxrzstcdwpsdajczzp)
+-- UNIFICAÇÃO DO DASH — Base única de projetos
+-- ✅ JÁ EXECUTADA em 17/07/2026 no projeto hrfcmlqhgxzwjhnwawvc (GuilhermeBassin's Project),
+--    incluindo a migração dos 86 projetos do banco antigo do Figma Make (mmzxrz…).
+--    Mantida aqui como registro e para recriação do ambiente se necessário (é idempotente).
 -- ============================================================================
 
 -- 1. Tabela única de projetos (FupItem — dicionário oficial)
@@ -43,6 +45,12 @@ CREATE TABLE IF NOT EXISTS public.listas (
     UNIQUE (tipo, valor)
 );
 
+-- 3. KV do Controle de Demandas (performance, KPIs etc. — dados não-projeto)
+CREATE TABLE IF NOT EXISTS public.kv_store_e6688139 (
+    key   TEXT PRIMARY KEY,
+    value JSONB NOT NULL
+);
+
 -- Semente com os valores oficiais
 INSERT INTO public.listas (tipo, valor) VALUES
   ('temaMacro','GDD'), ('temaMacro','Abertura de Conta'), ('temaMacro','Atualização Cadastral'),
@@ -52,19 +60,26 @@ INSERT INTO public.listas (tipo, valor) VALUES
   ('origem','Fast-Track'), ('origem','PA'), ('origem','Performance'), ('origem','Negócios')
 ON CONFLICT (tipo, valor) DO NOTHING;
 
--- 3. RLS (mesmo padrão já usado pelo app)
+-- 4. RLS (mesmo padrão já usado pelos apps)
 ALTER TABLE public.fup_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.listas    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kv_store_e6688139 ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Acesso total fup_items" ON public.fup_items;
 DROP POLICY IF EXISTS "Acesso total listas"    ON public.listas;
+DROP POLICY IF EXISTS "Acesso total kv"        ON public.kv_store_e6688139;
 CREATE POLICY "Acesso total fup_items" ON public.fup_items FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total listas"    ON public.listas    FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total kv"        ON public.kv_store_e6688139 FOR ALL USING (true) WITH CHECK (true);
 
--- 4. Realtime (sincronização automática entre Controle de Demandas e Roadmap/Timeline)
-ALTER PUBLICATION supabase_realtime ADD TABLE public.fup_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.listas;
+-- 5. Realtime (sincronização automática entre Controle de Demandas e Roadmap/Timeline)
+DO $dd$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.fup_items;
+EXCEPTION WHEN duplicate_object THEN NULL; END $dd$;
+DO $dd$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.listas;
+EXCEPTION WHEN duplicate_object THEN NULL; END $dd$;
 
--- 5. updated_at automático
+-- 6. updated_at automático
 CREATE OR REPLACE FUNCTION public.touch_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = timezone('utc', now()); RETURN NEW; END;
@@ -74,29 +89,11 @@ CREATE TRIGGER trg_fup_items_updated BEFORE UPDATE ON public.fup_items
 FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
 -- ============================================================================
--- MIGRAÇÃO DE DADOS
--- a) Os projetos do Controle de Demandas (blob kv_store "dashboard-data") são
---    importados automaticamente pelo próprio app na primeira carga após o deploy
---    desta versão (auto-migração quando fup_items está vazia).
--- b) A base antiga do Roadmap (projeto hrfcmlqhgxzwjhnwawvc) tinha 2 projetos,
---    ambos já existentes no Controle de Demandas. Após a auto-migração do item (a),
---    execute o bloco abaixo para enriquecer esses 2 registros com os dados que só
---    existiam no Roadmap (descrição, épico Jira, datas e progresso):
+-- MIGRAÇÃO DE DADOS (✅ já executada em 17/07/2026):
+--  • 86 fupItems do blob kv do banco antigo (mmzxrz…) → fup_items
+--  • Temas/Origens personalizados → listas (10 valores extras)
+--  • Blob (performanceItems, kpis etc.) → kv_store_e6688139
+--  • Enriquecimento dos 2 projetos que existiam na tabela legada `projetos`
+--    (TPLAT-805 e TPLAT-798: descrição, épico, datas e progresso)
+-- As tabelas legadas `projetos` e `usuarios` deste banco não são mais usadas.
 -- ============================================================================
-
--- Executar SOMENTE depois que o app tiver feito a auto-migração (fup_items populada):
-UPDATE public.fup_items SET
-  descricao    = 'Descontinuação planejada do sistema CADU, assegurando migração e disponibilidade dos dados e funcionalidades críticas no AppSmith, com uso de APIs padronizadas e comunicação a todos os envolvidos.',
-  link_roadmap = 'TPLAT-805',
-  data_inicio  = '2026-03-01',
-  data_limite  = COALESCE(data_limite, '2026-09-30'),
-  progresso    = 55
-WHERE atividade ILIKE 'Migra%CADU%MDM%';
-
-UPDATE public.fup_items SET
-  descricao    = 'Necessidade de base única considerada por todos os canais, jornadas, produtos e serviços para alimentação dos dados cadastrais (tanto input quanto consumo).',
-  link_roadmap = 'TPLAT-798',
-  data_inicio  = '2026-01-01',
-  data_limite  = COALESCE(data_limite, '2026-12-31'),
-  progresso    = 46
-WHERE atividade ILIKE 'UNIFICA%bases%Telefone%';

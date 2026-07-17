@@ -19,13 +19,14 @@ import {
   rowToFup, fupToRow,
 } from "./dicionario";
 
-// ─── Supabase (BASE ÚNICA — mesma do Controle de Demandas) ───────────────────
+// ─── Supabase (BASE ÚNICA do Dash — projeto do usuário, compartilhada com o
+//     Controle de Demandas) ──────────────────────────────────────────────────
 
 const SUPABASE_URL =
-  (import.meta as any).env?.VITE_SUPABASE_URL ?? "https://mmzxrzstcdwpsdajczzp.supabase.co";
+  (import.meta as any).env?.VITE_SUPABASE_URL ?? "https://hrfcmlqhgxzwjhnwawvc.supabase.co";
 const SUPABASE_ANON_KEY =
   (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tenhyenN0Y2R3cHNkYWpjenpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MjA5OTgsImV4cCI6MjA5NTk5Njk5OH0.JzhTlG_wE4dQKNXj9jTqCg87GQqOs_gJ5YdPGOKbGak";
+  "sb_publishable_vu9hGerEQY1IMrZ-kNpOBQ_AH_okmx3";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
