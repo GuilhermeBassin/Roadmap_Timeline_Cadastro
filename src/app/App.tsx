@@ -1,323 +1,95 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   Plus, ChevronRight, AlertTriangle, Trash2, Edit3,
-  LayoutGrid, BarChart3, Search, X, Calendar,
-  TrendingUp, AlertCircle, Filter, ChevronDown,
-  Activity, Flag, Link2, RotateCcw, Zap, Target,
-  CheckCircle2, Clock, Users
+  LayoutGrid, BarChart3, Search, X,
+  TrendingUp, AlertCircle, Filter,
+  Activity, Link2, RotateCcw, Target,
+  CheckCircle2, Clock, Users, ClipboardList,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
+import {
+  Area, FupStatus, Prioridade, FupItem,
+  AREAS, FUP_STATUSES, PRIORIDADES, OWNERS,
+  TEMAS_MACRO_INICIAIS, ORIGENS_INICIAIS,
+  STATUS_CFG, PRIORIDADE_CFG, AREA_CFG,
+  emAndamento, ownerColor, initialsOf, NEXT_STATUS,
+  rowToFup, fupToRow,
+} from "./dicionario";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Status = "discovery" | "backlog" | "dev" | "homolog" | "done" | "blocked";
-type Category = "Validação" | "Documentos" | "Onboarding" | "Atualização Cadastral" | "Integrações";
-type Quarter =
-  | "Q1 2025" | "Q2 2025" | "Q3 2025" | "Q4 2025"
-  | "Q1 2026" | "Q2 2026" | "Q3 2026" | "Q4 2026"
-  | "Q1 2027" | "Q2 2027";
-type View = "roadmap" | "timeline" | "dashboard";
-
-interface Project {
-  id: string;
-  title: string;
-  category: Category;
-  status: Status;
-  quarter: Quarter;
-  progress: number;
-  startDate: string;
-  endDate: string;
-  owner: string;
-  ownerInitials: string;
-  ownerColor: string;
-  epicJira: string;
-  description: string;
-  tags: string[];
-  hasDependencies: boolean;
-  blockedReason?: string;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const SC: Record<Status, { label: string; color: string; bg: string; border: string }> = {
-  discovery: { label: "Discovery",         color: "#9333EA", bg: "rgba(147,51,234,0.14)",  border: "rgba(147,51,234,0.35)" },
-  backlog:   { label: "Backlog",           color: "#3B82F6", bg: "rgba(96,165,250,0.14)",  border: "rgba(96,165,250,0.35)" },
-  dev:       { label: "Em Desenvolvimento",color: "#EA580C", bg: "rgba(251,146,60,0.14)",  border: "rgba(251,146,60,0.35)" },
-  homolog:   { label: "Em Homologação",    color: "#D97706", bg: "rgba(251,191,36,0.14)",  border: "rgba(251,191,36,0.35)" },
-  done:      { label: "Concluído",         color: "#10B981", bg: "rgba(52,211,153,0.14)",  border: "rgba(52,211,153,0.35)" },
-  blocked:   { label: "Bloqueado",         color: "#EF4444", bg: "rgba(239,68,68,0.14)",   border: "rgba(239,68,68,0.35)" },
-};
-
-const NEXT_STATUS: Partial<Record<Status, Status>> = {
-  discovery: "backlog",
-  backlog: "dev",
-  dev: "homolog",
-  homolog: "done",
-};
-
-const KANBAN_COLS: Status[] = ["discovery", "backlog", "dev", "homolog", "done", "blocked"];
-const QUARTERS: Quarter[] = [
-  "Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025",
-  "Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026",
-  "Q1 2027", "Q2 2027",
-];
-const CATEGORIES: Category[] = ["Validação", "Documentos", "Onboarding", "Atualização Cadastral", "Integrações"];
-
-const CAT_COLOR: Record<Category, string> = {
-  "Validação":             "#7C3AED",
-  "Documentos":            "#0284C7",
-  "Onboarding":            "#10B981",
-  "Atualização Cadastral": "#EA580C",
-  "Integrações":           "#DB2777",
-};
-
-interface Owner {
-  id: string | null;
-  name: string;
-  initials: string;
-  color: string;
-}
-
-const OWNER_PALETTE = ["#6366F1", "#EC4899", "#0D9488", "#D97706", "#8B5CF6", "#0284C7", "#DB2777", "#10B981"];
-
-const DEFAULT_OWNERS: Owner[] = [
-  { id: null, name: "Guilherme Bassin",   initials: "GB", color: "#6366F1" },
-  { id: null, name: "Juliana Genova",     initials: "JG", color: "#EC4899" },
-  { id: null, name: "Pedro Gabriel Silva", initials: "PG", color: "#0D9488" },
-];
-
-// ─── Supabase ────────────────────────────────────────────────────────────────
+// ─── Supabase (BASE ÚNICA — mesma do Controle de Demandas) ───────────────────
 
 const SUPABASE_URL =
-  (import.meta as any).env?.VITE_SUPABASE_URL ?? "https://hrfcmlqhgxzwjhnwawvc.supabase.co";
-// Chave publicável (publishable/anon) — segura para uso no browser com RLS ativado.
+  (import.meta as any).env?.VITE_SUPABASE_URL ?? "https://mmzxrzstcdwpsdajczzp.supabase.co";
 const SUPABASE_ANON_KEY =
   (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ??
-  "sb_publishable_vu9hGerEQY1IMrZ-kNpOBQ_AH_okmx3";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tenhyenN0Y2R3cHNkYWpjenpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MjA5OTgsImV4cCI6MjA5NTk5Njk5OH0.JzhTlG_wE4dQKNXj9jTqCg87GQqOs_gJ5YdPGOKbGak";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const STATUS_ALIASES: Record<string, Status> = {
-  "discovery": "discovery",
-  "backlog": "backlog",
-  "dev": "dev",
-  "em desenvolvimento": "dev",
-  "homolog": "homolog",
-  "em homologação": "homolog",
-  "done": "done",
-  "concluído": "done",
-  "concluido": "done",
-  "blocked": "blocked",
-  "bloqueado": "blocked",
-};
+type View = "roadmap" | "timeline" | "dashboard";
 
-function normalizeStatus(s: string | null): Status {
-  if (!s) return "discovery";
-  return STATUS_ALIASES[s.trim().toLowerCase()] ?? "discovery";
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase() || "??";
-}
-
-function rowToProject(row: any, owners: Owner[]): Project {
-  const owner = owners.find(o => o.id === row.owner_id);
-  return {
-    id: row.id,
-    title: row.nome ?? "",
-    category: (row.categoria as Category) ?? "Validação",
-    status: normalizeStatus(row.status),
-    quarter: (row.quarter_entrega as Quarter) ?? "Q1 2026",
-    progress: row.progresso ?? 0,
-    startDate: row.data_inicio ?? "",
-    endDate: row.data_previsao ?? "",
-    owner: owner?.name ?? "—",
-    ownerInitials: owner?.initials ?? "??",
-    ownerColor: owner?.color ?? "#6366F1",
-    epicJira: row.epico_jira ?? "",
-    description: row.descricao ?? "",
-    tags: row.tags ?? [],
-    hasDependencies: row.possui_dependencias ?? false,
-    blockedReason: row.mensagem_alerta ?? undefined,
-  };
-}
-
-function projectToRow(p: Partial<Project>, owners: Owner[]) {
-  const owner = owners.find(o => o.name === p.owner);
-  return {
-    nome: p.title ?? "",
-    descricao: p.description ?? "",
-    categoria: p.category ?? "Validação",
-    quarter_entrega: p.quarter ?? "Q1 2026",
-    status: p.status ?? "discovery",
-    owner_id: owner?.id ?? null,
-    data_inicio: p.startDate || null,
-    data_previsao: p.endDate || null,
-    epico_jira: p.epicJira ?? "",
-    progresso: p.progress ?? 0,
-    possui_dependencias: p.hasDependencies ?? false,
-    tags: p.tags ?? [],
-    mensagem_alerta: p.blockedReason ?? null,
-  };
-}
+const KANBAN_COLS: FupStatus[] = [...FUP_STATUSES];
 
 const MONTHS_PT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 
-// ─── Initial Data ─────────────────────────────────────────────────────────────
-
-const INITIAL: Project[] = [
-  {
-    id: "1", title: "Validação Biométrica em Tempo Real",
-    category: "Validação", status: "dev", quarter: "Q2 2025",
-    progress: 65, startDate: "2025-04-01", endDate: "2025-06-30",
-    owner: "Lucas Ferreira", ownerInitials: "LF", ownerColor: "#6366F1",
-    epicJira: "CAD-3250",
-    description: "Validação biométrica facial em tempo real para onboarding digital.",
-    tags: ["biometria", "IA"], hasDependencies: true,
-  },
-  {
-    id: "2", title: "Atualização Cadastral PF Regulatória",
-    category: "Atualização Cadastral", status: "homolog", quarter: "Q1 2025",
-    progress: 90, startDate: "2025-01-15", endDate: "2025-03-31",
-    owner: "Ana Paula Costa", ownerInitials: "AC", ownerColor: "#EC4899",
-    epicJira: "CAD-2890",
-    description: "Adequação regulatória para atualização de dados cadastrais de PF.",
-    tags: ["compliance", "regulatório"], hasDependencies: false,
-  },
-  {
-    id: "3", title: "Integração Bureau de Crédito Externo",
-    category: "Integrações", status: "discovery", quarter: "Q3 2025",
-    progress: 15, startDate: "2025-07-01", endDate: "2025-09-30",
-    owner: "Rafael Mendes", ownerInitials: "RM", ownerColor: "#0D9488",
-    epicJira: "",
-    description: "Discovery para integração com bureau de crédito externo.",
-    tags: ["bureau", "crédito"], hasDependencies: false,
-  },
-  {
-    id: "4", title: "Onboarding Digital Completo PJ",
-    category: "Onboarding", status: "backlog", quarter: "Q2 2025",
-    progress: 5, startDate: "2025-04-15", endDate: "2025-06-15",
-    owner: "Camila Santos", ownerInitials: "CS", ownerColor: "#D97706",
-    epicJira: "CAD-3180",
-    description: "Novo fluxo de onboarding digital completo para pessoas jurídicas.",
-    tags: ["PJ", "onboarding"], hasDependencies: true,
-  },
-  {
-    id: "5", title: "Documentação KYC Automatizada",
-    category: "Documentos", status: "dev", quarter: "Q2 2025",
-    progress: 40, startDate: "2025-03-01", endDate: "2025-05-31",
-    owner: "Lucas Ferreira", ownerInitials: "LF", ownerColor: "#6366F1",
-    epicJira: "CAD-3100",
-    description: "Automação da coleta e validação de documentos KYC.",
-    tags: ["KYC", "automação"], hasDependencies: false,
-  },
-  {
-    id: "6", title: "Validação de Documentos por IA",
-    category: "Validação", status: "discovery", quarter: "Q3 2025",
-    progress: 10, startDate: "2025-07-01", endDate: "2025-09-15",
-    owner: "Fernanda Lima", ownerInitials: "FL", ownerColor: "#8B5CF6",
-    epicJira: "",
-    description: "IA para validação automática de documentos de identidade.",
-    tags: ["IA", "OCR"], hasDependencies: true,
-  },
-  {
-    id: "7", title: "Integração Receita Federal",
-    category: "Integrações", status: "done", quarter: "Q1 2025",
-    progress: 100, startDate: "2025-01-05", endDate: "2025-02-28",
-    owner: "Rafael Mendes", ownerInitials: "RM", ownerColor: "#0D9488",
-    epicJira: "CAD-2750",
-    description: "Integração com Receita Federal para consulta de CPF/CNPJ.",
-    tags: ["Receita Federal"], hasDependencies: false,
-  },
-  {
-    id: "8", title: "Atualização de Endereço via API Correios",
-    category: "Atualização Cadastral", status: "blocked", quarter: "Q2 2025",
-    progress: 30, startDate: "2025-02-01", endDate: "2025-04-30",
-    owner: "Ana Paula Costa", ownerInitials: "AC", ownerColor: "#EC4899",
-    epicJira: "CAD-2950",
-    description: "Atualização automática de endereço via API dos Correios.",
-    tags: ["endereço", "Correios"], hasDependencies: true,
-    blockedReason: "Aguardando definição de contrato com API dos Correios",
-  },
-  {
-    id: "9", title: "Portal Self-Service Cadastral",
-    category: "Atualização Cadastral", status: "backlog", quarter: "Q3 2025",
-    progress: 0, startDate: "2025-07-15", endDate: "2025-09-30",
-    owner: "Camila Santos", ownerInitials: "CS", ownerColor: "#D97706",
-    epicJira: "",
-    description: "Portal para clientes atualizarem dados cadastrais de forma autônoma.",
-    tags: ["self-service", "portal"], hasDependencies: false,
-  },
-  {
-    id: "10", title: "Revalidação Cadastral Periódica",
-    category: "Validação", status: "discovery", quarter: "Q4 2025",
-    progress: 5, startDate: "2025-10-01", endDate: "2025-12-15",
-    owner: "Fernanda Lima", ownerInitials: "FL", ownerColor: "#8B5CF6",
-    epicJira: "",
-    description: "Sistema de revalidação periódica automática dos dados cadastrais.",
-    tags: ["revalidação", "automação"], hasDependencies: false,
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
-
-function fmtDate(d: string) {
+function fmtDate(d?: string) {
   if (!d) return "—";
   const [y, m, day] = d.split("-");
   return `${day}/${m}/${y.slice(2)}`;
 }
 
-function dateToMonthFrac(d: string): number {
-  const dt = new Date(d);
-  return dt.getMonth() + dt.getDate() / 31;
-}
-
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
-function Avatar({ initials, color, size = 24 }: { initials: string; color: string; size?: number }) {
+function Avatar({ nome, size = 24 }: { nome: string; size?: number }) {
+  const color = nome ? ownerColor(nome) : "#94A3B8";
   return (
     <div
       className="flex items-center justify-center rounded-full text-white font-bold flex-shrink-0"
       style={{ width: size, height: size, background: color, fontSize: size * 0.38 }}
+      title={nome || "Sem focal"}
     >
-      {initials}
+      {initialsOf(nome)}
     </div>
   );
 }
 
-// ─── StatusBadge ─────────────────────────────────────────────────────────────
+// ─── Badges ───────────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: Status }) {
-  const c = SC[status];
+function StatusBadge({ status }: { status: FupStatus }) {
+  const c = STATUS_CFG[status];
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap"
       style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}
     >
       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.color }} />
-      {c.label}
+      {status}
     </span>
   );
 }
 
-// ─── CategoryTag ─────────────────────────────────────────────────────────────
-
-function CategoryTag({ category }: { category: Category }) {
-  const color = CAT_COLOR[category];
+function TemaTag({ tema }: { tema: string }) {
+  if (!tema) return null;
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-      style={{ background: `${color}18`, color, border: `1px solid ${color}30` }}
+      style={{ background: "rgba(99,102,241,0.09)", color: "#6366F1", border: "1px solid rgba(99,102,241,0.19)" }}
     >
-      {category}
+      {tema}
+    </span>
+  );
+}
+
+function PrioridadeBadge({ prioridade }: { prioridade: Prioridade }) {
+  const c = PRIORIDADE_CFG[prioridade];
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium" style={{ background: c.bg, color: c.color }}>
+      {prioridade}
     </span>
   );
 }
@@ -338,11 +110,11 @@ function ProgressBar({ value, color }: { value: number; color: string }) {
 // ─── ProjectCard ─────────────────────────────────────────────────────────────
 
 interface CardProps {
-  project: Project;
-  onMove: (id: string, status: Status) => void;
-  onEdit: (project: Project) => void;
+  project: FupItem;
+  onMove: (id: string, status: FupStatus) => void;
+  onEdit: (project: FupItem) => void;
   onDelete: (id: string) => void;
-  onBlock: (project: Project) => void;
+  onBlock: (project: FupItem) => void;
   onUnblock: (id: string) => void;
   draggable?: boolean;
   onDragStart?: () => void;
@@ -351,7 +123,7 @@ interface CardProps {
 function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, draggable, onDragStart }: CardProps) {
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const cfg = SC[project.status];
+  const cfg = STATUS_CFG[project.status];
   const nextSt = NEXT_STATUS[project.status];
 
   return (
@@ -371,7 +143,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
       {/* Header row */}
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold leading-snug flex-1" style={{ color: "#1E293B", fontFamily: "Inter, sans-serif" }}>
-          {project.title}
+          {project.atividade}
         </p>
         <button
           onClick={() => setMenuOpen(v => !v)}
@@ -384,71 +156,62 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
         </button>
       </div>
 
-      {/* Category */}
-      <CategoryTag category={project.category} />
+      {/* Tema Macro + Prioridade */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <TemaTag tema={project.temaMacro} />
+        <PrioridadeBadge prioridade={project.prioridade} />
+      </div>
 
-      {/* Progress */}
+      {/* Progress (auxiliar Timeline) */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-xs" style={{ color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>
             progresso
           </span>
           <span className="text-xs font-medium" style={{ color: cfg.color, fontFamily: "JetBrains Mono, monospace" }}>
-            {project.progress}%
+            {project.progresso ?? 0}%
           </span>
         </div>
-        <ProgressBar value={project.progress} color={cfg.color} />
+        <ProgressBar value={project.progresso ?? 0} color={cfg.color} />
       </div>
 
-      {/* Blocked reason */}
-      {project.status === "blocked" && project.blockedReason && (
+      {/* Resumo de status (motivo do bloqueio quando Bloqueado) */}
+      {project.status === "Bloqueado" && project.resumoStatus && (
         <div className="flex items-start gap-1.5 rounded-lg p-2" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
           <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" style={{ color: "#EF4444" }} />
-          <span className="text-xs leading-relaxed" style={{ color: "#DC2626" }}>{project.blockedReason}</span>
+          <span className="text-xs leading-relaxed" style={{ color: "#DC2626" }}>{project.resumoStatus}</span>
         </div>
       )}
 
       {/* Meta row */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Avatar initials={project.ownerInitials} color={project.ownerColor} size={22} />
-          {project.epicJira && (
+          <Avatar nome={project.focal} size={22} />
+          {project.linkRoadMap && (
             <span className="text-xs font-medium" style={{ color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
-              {project.epicJira}
+              {project.linkRoadMap}
             </span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
-          {project.hasDependencies && (
-            <span title="Possui dependências">
+          {project.dependencias && (
+            <span title={`Dependências: ${project.dependencias}`}>
               <Link2 size={11} style={{ color: "#D97706" }} />
             </span>
           )}
           <span className="text-xs" style={{ color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
-            {fmtDate(project.endDate)}
+            {fmtDate(project.dataLimite)}
           </span>
         </div>
       </div>
 
-      {/* Tags */}
-      {project.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {project.tags.slice(0, 3).map(t => (
-            <span key={t} className="text-xs px-1.5 py-0.5 rounded" style={{ background: "rgba(15,23,42,0.05)", color: "#64748B" }}>
-              #{t}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Quarter badge */}
+      {/* Origem + avançar */}
       <div className="flex items-center justify-between">
         <span className="text-xs" style={{ color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
-          {project.quarter}
+          {project.origem || "—"}
         </span>
-        {/* Action buttons - visible on hover */}
         <div className={`flex items-center gap-1 transition-opacity duration-150 ${hovered ? "opacity-100" : "opacity-0"}`}>
-          {project.status === "blocked" ? (
+          {project.status === "Bloqueado" ? (
             <button
               onClick={() => onUnblock(project.id)}
               className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
@@ -462,10 +225,10 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
             <button
               onClick={() => onMove(project.id, nextSt)}
               className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
-              style={{ background: SC[nextSt].bg, color: SC[nextSt].color, border: `1px solid ${SC[nextSt].border}` }}
-              title={`Mover para ${SC[nextSt].label}`}
+              style={{ background: STATUS_CFG[nextSt].bg, color: STATUS_CFG[nextSt].color, border: `1px solid ${STATUS_CFG[nextSt].border}` }}
+              title={`Mover para ${nextSt}`}
             >
-              {SC[nextSt].label.split(" ")[0]}
+              {nextSt.split(" ")[0]}
               <ChevronRight size={10} />
             </button>
           ) : null}
@@ -479,7 +242,7 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
           style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.1)", boxShadow: "0 8px 32px rgba(15,23,42,0.12)" }}
         >
           <MenuItem icon={<Edit3 size={12} />} label="Editar" onClick={() => { setMenuOpen(false); onEdit(project); }} />
-          {project.status !== "blocked" && (
+          {project.status !== "Bloqueado" && (
             <MenuItem icon={<AlertTriangle size={12} />} label="Bloquear" onClick={() => { setMenuOpen(false); onBlock(project); }} color="#D97706" />
           )}
           <MenuItem icon={<Trash2 size={12} />} label="Excluir" onClick={() => { setMenuOpen(false); onDelete(project.id); }} color="#EF4444" />
@@ -504,32 +267,24 @@ function MenuItem({ icon, label, onClick, color }: { icon: React.ReactNode; labe
 // ─── Roadmap View ─────────────────────────────────────────────────────────────
 
 function RoadmapView({
-  projects, filterQuarter, filterCategory, filterStatus,
-  onMove, onEdit, onDelete, onBlock, onUnblock, onNew,
+  projects, onMove, onEdit, onDelete, onBlock, onUnblock, onNew,
 }: {
-  projects: Project[];
-  filterQuarter: string; filterCategory: string; filterStatus: string;
-  onMove: (id: string, status: Status) => void;
-  onEdit: (p: Project) => void;
+  projects: FupItem[];
+  onMove: (id: string, status: FupStatus) => void;
+  onEdit: (p: FupItem) => void;
   onDelete: (id: string) => void;
-  onBlock: (p: Project) => void;
+  onBlock: (p: FupItem) => void;
   onUnblock: (id: string) => void;
   onNew: () => void;
 }) {
   const [dragId, setDragId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<Status | null>(null);
-
-  const filtered = projects.filter(p =>
-    (filterQuarter === "all" || p.quarter === filterQuarter) &&
-    (filterCategory === "all" || p.category === filterCategory) &&
-    (filterStatus === "all" || p.status === filterStatus)
-  );
+  const [dropTarget, setDropTarget] = useState<FupStatus | null>(null);
 
   return (
     <div className="flex gap-4 h-full pb-4 overflow-x-auto min-w-0 pr-2">
       {KANBAN_COLS.map(status => {
-        const cfg = SC[status];
-        const cards = filtered.filter(p => p.status === status);
+        const cfg = STATUS_CFG[status];
+        const cards = projects.filter(p => p.status === status);
         const isTarget = dropTarget === status && dragId != null;
 
         return (
@@ -537,7 +292,7 @@ function RoadmapView({
             key={status}
             className="flex-shrink-0 flex flex-col rounded-xl"
             style={{
-              width: 288,
+              width: 272,
               background: "#F8FAFC",
               border: `1px solid ${isTarget ? cfg.color : "rgba(15,23,42,0.06)"}`,
               boxShadow: isTarget ? `0 0 0 1px ${cfg.color}, 0 0 24px ${cfg.bg}` : "none",
@@ -554,8 +309,8 @@ function RoadmapView({
             <div className="px-4 py-3 flex items-center justify-between border-b" style={{ borderColor: "rgba(15,23,42,0.06)" }}>
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: cfg.color }} />
-                <span className="text-sm font-semibold" style={{ color: cfg.color, fontFamily: "Inter, sans-serif" }}>
-                  {cfg.label}
+                <span className="text-sm font-semibold whitespace-nowrap" style={{ color: cfg.color, fontFamily: "Inter, sans-serif" }}>
+                  {status}
                 </span>
               </div>
               <span
@@ -583,11 +338,11 @@ function RoadmapView({
                   Arraste um card aqui
                 </div>
               )}
-              {status === "discovery" && (
+              {status === "Backlog" && (
                 <button
                   onClick={onNew}
                   className="flex items-center justify-center gap-2 w-full rounded-xl py-3 text-xs font-medium transition-all duration-150 hover:opacity-80"
-                  style={{ border: "1px dashed rgba(147,51,234,0.3)", color: "#9333EA", background: "rgba(147,51,234,0.04)" }}
+                  style={{ border: "1px dashed rgba(99,102,241,0.3)", color: "#6366F1", background: "rgba(99,102,241,0.04)" }}
                 >
                   <Plus size={13} /> Novo Projeto
                 </button>
@@ -602,27 +357,38 @@ function RoadmapView({
 
 // ─── Timeline / Gantt View ────────────────────────────────────────────────────
 
-const MILESTONES: Record<string, { label: string; icon: React.ReactNode }> = {
-  kickoff:   { label: "Kick-off",           icon: <Flag size={10} /> },
-  dev_done:  { label: "Dev Concluído",       icon: <CheckCircle2 size={10} /> },
-  golive:    { label: "Go-live",             icon: <Zap size={10} /> },
-};
+function TimelineView({ projects }: { projects: FupItem[] }) {
+  const TOTAL_MONTHS = 12;
 
-function TimelineView({ projects }: { projects: Project[] }) {
-  const TOTAL_MONTHS = 12; // Jan–Dec 2025
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
 
   function monthFrac(dateStr: string): number {
-    const d = new Date(dateStr);
-    return d.getMonth() + (d.getDate() - 1) / 31;
+    const d = new Date(dateStr + "T12:00:00");
+    const yearOffset = (d.getFullYear() - year) * 12;
+    return yearOffset + d.getMonth() + (d.getDate() - 1) / 31;
   }
 
-  const sorted = [...projects].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  // Itens com pelo menos uma data entram no gráfico; sem datas ficam listados abaixo
+  const withDates = projects.filter(p => p.dataLimite || p.dataInicio);
+  const noDates = projects.filter(p => !p.dataLimite && !p.dataInicio);
+
+  const sorted = [...withDates].sort((a, b) => {
+    const sa = a.dataInicio || a.dataLimite || "";
+    const sb = b.dataInicio || b.dataLimite || "";
+    return new Date(sa).getTime() - new Date(sb).getTime();
+  });
 
   return (
     <div className="flex flex-col h-full" style={{ fontFamily: "Inter, sans-serif" }}>
-      {/* Quarter labels */}
-      <div className="flex border-b" style={{ borderColor: "rgba(15,23,42,0.07)", paddingLeft: 220 }}>
-        {["Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025"].map((q, i) => (
+      {/* Year selector + quarter labels */}
+      <div className="flex items-center border-b" style={{ borderColor: "rgba(15,23,42,0.07)" }}>
+        <div className="flex items-center gap-1 flex-shrink-0 pl-3" style={{ width: 220 }}>
+          <button onClick={() => setYear(y => y - 1)} className="px-2 py-1 rounded text-xs" style={{ color: "#64748B", background: "rgba(15,23,42,0.05)" }}>‹</button>
+          <span className="text-xs font-bold px-2" style={{ color: "#475569", fontFamily: "JetBrains Mono, monospace" }}>{year}</span>
+          <button onClick={() => setYear(y => y + 1)} className="px-2 py-1 rounded text-xs" style={{ color: "#64748B", background: "rgba(15,23,42,0.05)" }}>›</button>
+        </div>
+        {[`Q1 ${year}`, `Q2 ${year}`, `Q3 ${year}`, `Q4 ${year}`].map(q => (
           <div key={q} className="flex-1 text-center text-xs font-semibold py-2" style={{ color: "#94A3B8" }}>
             {q}
           </div>
@@ -631,7 +397,7 @@ function TimelineView({ projects }: { projects: Project[] }) {
 
       {/* Month labels */}
       <div className="flex border-b" style={{ borderColor: "rgba(15,23,42,0.05)", paddingLeft: 220 }}>
-        {MONTHS_PT.map((m, i) => (
+        {MONTHS_PT.map(m => (
           <div key={m} className="flex-1 text-center py-1.5" style={{ fontSize: 10, color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
             {m}
           </div>
@@ -640,11 +406,14 @@ function TimelineView({ projects }: { projects: Project[] }) {
 
       {/* Rows */}
       <div className="flex-1 overflow-y-auto">
-        {sorted.map((p, idx) => {
-          const startFrac = Math.max(0, Math.min(1, monthFrac(p.startDate) / TOTAL_MONTHS));
-          const endFrac = Math.max(0, Math.min(1, (monthFrac(p.endDate) + 0.9) / TOTAL_MONTHS));
+        {sorted.map(p => {
+          const start = p.dataInicio || p.dataLimite;
+          const end = p.dataLimite || p.dataInicio;
+          const startFrac = Math.max(0, Math.min(1, monthFrac(start!) / TOTAL_MONTHS));
+          const endFrac = Math.max(0, Math.min(1, (monthFrac(end!) + 0.9) / TOTAL_MONTHS));
           const widthFrac = Math.max(0.01, endFrac - startFrac);
-          const cfg = SC[p.status];
+          const cfg = STATUS_CFG[p.status];
+          const visible = endFrac > 0 && startFrac < 1;
 
           return (
             <div
@@ -654,16 +423,15 @@ function TimelineView({ projects }: { projects: Project[] }) {
             >
               {/* Project info */}
               <div className="flex-shrink-0 flex items-center gap-2.5 pr-4 pl-3" style={{ width: 220 }}>
-                <Avatar initials={p.ownerInitials} color={p.ownerColor} size={22} />
+                <Avatar nome={p.focal} size={22} />
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: "#475569", maxWidth: 155 }}>{p.title}</p>
+                  <p className="text-xs font-semibold truncate" style={{ color: "#475569", maxWidth: 155 }} title={p.atividade}>{p.atividade}</p>
                   <StatusBadge status={p.status} />
                 </div>
               </div>
 
               {/* Gantt area */}
               <div className="flex-1 relative" style={{ height: 56 }}>
-                {/* Month grid lines */}
                 {MONTHS_PT.map((_, i) => (
                   <div
                     key={i}
@@ -672,87 +440,131 @@ function TimelineView({ projects }: { projects: Project[] }) {
                   />
                 ))}
 
-                {/* Bar */}
-                <div
-                  className="absolute top-1/2 rounded-lg flex items-center px-2 overflow-hidden"
-                  style={{
-                    left: `${startFrac * 100}%`,
-                    width: `${widthFrac * 100}%`,
-                    height: 28,
-                    transform: "translateY(-50%)",
-                    background: cfg.bg,
-                    border: `1px solid ${cfg.border}`,
-                    minWidth: 32,
-                  }}
-                >
-                  {/* Progress fill */}
-                  <div
-                    className="absolute inset-0 rounded-lg"
-                    style={{ width: `${p.progress}%`, background: `${cfg.color}22` }}
-                  />
-                  <span className="relative text-xs font-medium truncate" style={{ color: cfg.color, fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}>
-                    {p.progress}%
-                  </span>
-                  {p.hasDependencies && (
-                    <Link2 size={9} className="relative ml-1 flex-shrink-0" style={{ color: "#D97706" }} />
-                  )}
-                </div>
+                {visible && (
+                  <>
+                    <div
+                      className="absolute top-1/2 rounded-lg flex items-center px-2 overflow-hidden"
+                      style={{
+                        left: `${startFrac * 100}%`,
+                        width: `${widthFrac * 100}%`,
+                        height: 28,
+                        transform: "translateY(-50%)",
+                        background: cfg.bg,
+                        border: `1px solid ${cfg.border}`,
+                        minWidth: 32,
+                      }}
+                    >
+                      <div
+                        className="absolute inset-0 rounded-lg"
+                        style={{ width: `${p.progresso ?? 0}%`, background: `${cfg.color}22` }}
+                      />
+                      <span className="relative text-xs font-medium truncate" style={{ color: cfg.color, fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}>
+                        {p.progresso ?? 0}%
+                      </span>
+                      {p.dependencias && (
+                        <Link2 size={9} className="relative ml-1 flex-shrink-0" style={{ color: "#D97706" }} />
+                      )}
+                    </div>
 
-                {/* Go-live diamond at end */}
-                <div
-                  className="absolute top-1/2"
-                  style={{
-                    left: `calc(${endFrac * 100}% - 6px)`,
-                    transform: "translateY(-50%) rotate(45deg)",
-                    width: 10, height: 10,
-                    background: cfg.color,
-                    border: "2px solid #F4F6FB",
-                    borderRadius: 2,
-                  }}
-                  title="Go-live previsto"
-                />
+                    {/* Data limite (diamond) */}
+                    <div
+                      className="absolute top-1/2"
+                      style={{
+                        left: `calc(${endFrac * 100}% - 6px)`,
+                        transform: "translateY(-50%) rotate(45deg)",
+                        width: 10, height: 10,
+                        background: cfg.color,
+                        border: "2px solid #F4F6FB",
+                        borderRadius: 2,
+                      }}
+                      title={`Data limite: ${fmtDate(p.dataLimite)}`}
+                    />
+                  </>
+                )}
+                {!visible && (
+                  <span className="absolute top-1/2 -translate-y-1/2 left-3 text-xs" style={{ color: "#CBD5E1", fontFamily: "JetBrains Mono, monospace" }}>
+                    fora de {year}
+                  </span>
+                )}
               </div>
             </div>
           );
         })}
+
+        {noDates.length > 0 && (
+          <div className="px-4 py-3">
+            <p className="text-xs mb-2 font-semibold" style={{ color: "#94A3B8" }}>Sem datas definidas ({noDates.length})</p>
+            <div className="flex flex-wrap gap-2">
+              {noDates.map(p => (
+                <span key={p.id} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-lg" style={{ background: "rgba(15,23,42,0.04)", color: "#64748B" }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: STATUS_CFG[p.status].color }} />
+                  {p.atividade}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Dashboard View ───────────────────────────────────────────────────────────
+// ─── Dashboard View (Controle de Vertical) ───────────────────────────────────
 
-function DashboardView({ projects }: { projects: Project[] }) {
+function DashboardView({ projects, onCadastro }: { projects: FupItem[]; onCadastro: () => void }) {
   const counts = KANBAN_COLS.map(s => ({ status: s, count: projects.filter(p => p.status === s).length }));
   const total = projects.length;
-  const done = projects.filter(p => p.status === "done").length;
-  const blocked = projects.filter(p => p.status === "blocked").length;
-  const inDev = projects.filter(p => p.status === "dev").length;
-  const noOwner = projects.filter(p => !p.owner).length;
+  const done = projects.filter(p => p.status === "Concluído").length;
+  const blocked = projects.filter(p => p.status === "Bloqueado").length;
+  const andamento = projects.filter(p => emAndamento(p.status)).length;
+  const semFocal = projects.filter(p => !p.focal).length;
   const completion = total > 0 ? Math.round((done / total) * 100) : 0;
 
-  const atRisk = projects.filter(p => p.status === "blocked" || (p.progress < 50 && p.status === "homolog"));
+  const atRisk = projects.filter(p =>
+    p.status === "Bloqueado" ||
+    (p.prioridade === "Crítico" && p.status !== "Concluído" && p.status !== "Cancelado")
+  );
 
   const upcoming = projects
-    .filter(p => p.status !== "done" && p.status !== "blocked")
-    .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
+    .filter(p => p.status !== "Concluído" && p.status !== "Cancelado" && p.status !== "Bloqueado" && p.dataLimite)
+    .sort((a, b) => new Date(a.dataLimite).getTime() - new Date(b.dataLimite).getTime())
     .slice(0, 5);
 
   const chartData = counts
     .filter(c => c.count > 0)
-    .map(c => ({ name: SC[c.status as Status].label, value: c.count, color: SC[c.status as Status].color }));
+    .map(c => ({ name: c.status, value: c.count, color: STATUS_CFG[c.status].color }));
 
   const metricCards = [
     { label: "Total de Projetos", value: total, icon: <Target size={18} />, color: "#6366F1" },
-    { label: "Em Desenvolvimento", value: inDev, icon: <Activity size={18} />, color: "#EA580C" },
-    { label: "Concluídos",         value: done,    icon: <CheckCircle2 size={18} />, color: "#10B981" },
-    { label: "Bloqueados",         value: blocked, icon: <AlertCircle size={18} />, color: "#EF4444" },
-    { label: "Taxa de Conclusão",  value: `${completion}%`, icon: <TrendingUp size={18} />, color: "#D97706" },
-    { label: "Sem Owner",          value: noOwner, icon: <Users size={18} />, color: noOwner > 0 ? "#EF4444" : "#10B981" },
+    { label: "Em Andamento",      value: andamento, icon: <Activity size={18} />, color: "#EA580C" },
+    { label: "Concluídos",        value: done,    icon: <CheckCircle2 size={18} />, color: "#10B981" },
+    { label: "Bloqueados",        value: blocked, icon: <AlertCircle size={18} />, color: "#EF4444" },
+    { label: "Taxa de Conclusão", value: `${completion}%`, icon: <TrendingUp size={18} />, color: "#D97706" },
+    { label: "Sem Focal",         value: semFocal, icon: <Users size={18} />, color: semFocal > 0 ? "#EF4444" : "#10B981" },
   ];
 
   return (
-    <div className="grid gap-5 pb-6" style={{ gridTemplateColumns: "1fr 1fr", gridTemplateRows: "auto 1fr" }}>
+    <div className="grid gap-5 pb-6" style={{ gridTemplateColumns: "1fr 1fr", gridTemplateRows: "auto auto 1fr" }}>
+      {/* Botão de Cadastro — conecta ao fluxo de cadastro de projetos existente */}
+      <div className="col-span-2 flex items-center justify-between rounded-xl p-4" style={{ background: "#FFFFFF", border: "1px solid rgba(99,102,241,0.25)" }}>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "rgba(99,102,241,0.12)" }}>
+            <ClipboardList size={18} style={{ color: "#6366F1" }} />
+          </div>
+          <div>
+            <p className="text-sm font-bold" style={{ color: "#1E293B" }}>Cadastro de Projetos</p>
+            <p className="text-xs" style={{ color: "#94A3B8" }}>Novos projetos alimentam automaticamente o Roadmap e a Timeline</p>
+          </div>
+        </div>
+        <button
+          onClick={onCadastro}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)", color: "#fff", boxShadow: "0 4px 16px rgba(99,102,241,0.35)" }}
+        >
+          <Plus size={14} /> Cadastro
+        </button>
+      </div>
+
       {/* Metric cards */}
       <div className="col-span-2 grid gap-3" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
         {metricCards.map(m => (
@@ -780,8 +592,8 @@ function DashboardView({ projects }: { projects: Project[] }) {
           <BarChart data={chartData} barCategoryGap="30%">
             <XAxis
               dataKey="name"
-              tick={{ fill: "#94A3B8", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
-              axisLine={false} tickLine={false}
+              tick={{ fill: "#94A3B8", fontSize: 9, fontFamily: "JetBrains Mono, monospace" }}
+              axisLine={false} tickLine={false} interval={0} angle={-25} textAnchor="end" height={50}
             />
             <YAxis
               tick={{ fill: "#94A3B8", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}
@@ -818,32 +630,34 @@ function DashboardView({ projects }: { projects: Project[] }) {
               <p className="text-xs text-center py-4" style={{ color: "#94A3B8" }}>Nenhum projeto em risco</p>
             ) : atRisk.map(p => (
               <div key={p.id} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
-                <Avatar initials={p.ownerInitials} color={p.ownerColor} size={26} />
+                <Avatar nome={p.focal} size={26} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate" style={{ color: "#475569" }}>{p.title}</p>
+                  <p className="text-xs font-medium truncate" style={{ color: "#475569" }}>{p.atividade}</p>
                   <StatusBadge status={p.status} />
                 </div>
-                <span className="text-xs font-mono" style={{ color: "#EF4444", flexShrink: 0 }}>{p.progress}%</span>
+                <PrioridadeBadge prioridade={p.prioridade} />
               </div>
             ))}
           </div>
         </div>
 
-        {/* Upcoming go-lives */}
+        {/* Upcoming deadlines */}
         <div className="rounded-xl p-5 flex-1" style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.07)" }}>
           <div className="flex items-center gap-2 mb-4">
             <Clock size={14} style={{ color: "#10B981" }} />
             <h3 className="text-sm font-semibold" style={{ color: "#475569", fontFamily: "Inter, sans-serif" }}>
-              Próximos Go-lives
+              Próximas Datas Limite
             </h3>
           </div>
           <div className="flex flex-col gap-2">
-            {upcoming.map((p, i) => (
+            {upcoming.length === 0 ? (
+              <p className="text-xs text-center py-4" style={{ color: "#94A3B8" }}>Nenhuma data limite próxima</p>
+            ) : upcoming.map((p, i) => (
               <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg transition-colors hover:bg-white/[0.03]">
                 <span className="text-xs font-mono w-4 text-center" style={{ color: "#94A3B8" }}>{i + 1}</span>
-                <CategoryTag category={p.category} />
-                <p className="text-xs flex-1 truncate" style={{ color: "#64748B" }}>{p.title}</p>
-                <span className="text-xs font-mono flex-shrink-0" style={{ color: "#D97706" }}>{fmtDate(p.endDate)}</span>
+                <TemaTag tema={p.temaMacro} />
+                <p className="text-xs flex-1 truncate" style={{ color: "#64748B" }}>{p.atividade}</p>
+                <span className="text-xs font-mono flex-shrink-0" style={{ color: "#D97706" }}>{fmtDate(p.dataLimite)}</span>
               </div>
             ))}
           </div>
@@ -853,41 +667,62 @@ function DashboardView({ projects }: { projects: Project[] }) {
   );
 }
 
-// ─── Create / Edit Modal ──────────────────────────────────────────────────────
+// ─── Create / Edit Modal (fluxo de cadastro de projetos) ─────────────────────
 
 interface ModalProps {
   onClose: () => void;
-  onSave: (data: Partial<Project>) => void;
-  initial?: Project;
-  owners: Owner[];
+  onSave: (data: Partial<FupItem>) => void;
+  initial?: FupItem;
+  defaultArea: Area;
+  temasMacro: string[];
+  origens: string[];
+  onAddTema: (v: string) => void;
+  onAddOrigem: (v: string) => void;
 }
 
-function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
-  const OWNERS = owners.length > 0 ? owners : DEFAULT_OWNERS;
-  const [form, setForm] = useState({
-    title: initial?.title ?? "",
-    description: initial?.description ?? "",
-    category: initial?.category ?? "Validação" as Category,
-    quarter: initial?.quarter ?? "Q3 2026" as Quarter,
-    status: initial?.status ?? "discovery" as Status,
-    progress: initial?.progress ?? 0,
-    startDate: initial?.startDate ?? "2026-07-01",
-    endDate: initial?.endDate ?? "2026-09-30",
-    epicJira: initial?.epicJira ?? "",
-    owner: initial?.owner ?? (owners[0]?.name ?? "Guilherme Bassin"),
-    hasDependencies: initial?.hasDependencies ?? false,
+const ADD_NEW = "__add_new__";
+
+function ProjectModal({ onClose, onSave, initial, defaultArea, temasMacro, origens, onAddTema, onAddOrigem }: ModalProps) {
+  const [form, setForm] = useState<Partial<FupItem>>({
+    atividade: initial?.atividade ?? "",
+    area: initial?.area ?? defaultArea,
+    origem: initial?.origem ?? (origens[0] ?? ""),
+    temaMacro: initial?.temaMacro ?? (temasMacro[0] ?? ""),
+    status: initial?.status ?? "Backlog",
+    descricao: initial?.descricao ?? "",
+    resumoStatus: initial?.resumoStatus ?? "",
+    focal: initial?.focal ?? "",
+    prioridade: initial?.prioridade ?? "Médio",
+    dataLimite: initial?.dataLimite ?? "",
+    dependencias: initial?.dependencias ?? "",
+    linkUX: initial?.linkUX ?? "",
+    linkRoadMap: initial?.linkRoadMap ?? "",
+    dataInicio: initial?.dataInicio ?? "",
+    progresso: initial?.progresso ?? 0,
   });
 
-  const ownerObj = OWNERS.find(o => o.name === form.owner) ?? OWNERS[0];
-
-  function set<K extends keyof typeof form>(k: K, v: typeof form[K]) {
+  function set<K extends keyof FupItem>(k: K, v: FupItem[K]) {
     setForm(f => ({ ...f, [k]: v }));
   }
 
-  function handleSave() {
-    if (!form.title.trim()) return;
-    onSave({ ...form, ownerInitials: ownerObj.initials, ownerColor: ownerObj.color });
+  function handleDynamicSelect(value: string, kind: "temaMacro" | "origem") {
+    if (value === ADD_NEW) {
+      const novo = window.prompt(kind === "temaMacro" ? "Novo Tema Macro:" : "Nova Origem:");
+      const trimmed = novo?.trim();
+      if (!trimmed) return;
+      if (kind === "temaMacro") { onAddTema(trimmed); set("temaMacro", trimmed); }
+      else { onAddOrigem(trimmed); set("origem", trimmed); }
+    } else {
+      set(kind, value);
+    }
   }
+
+  function handleSave() {
+    if (!form.atividade?.trim()) return;
+    onSave(form);
+  }
+
+  const inputStyle = { background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" } as const;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.35)", backdropFilter: "blur(4px)" }}>
@@ -907,100 +742,134 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
 
         {/* Form */}
         <div className="flex flex-col gap-4">
-          <Field label="Nome do Projeto *">
+          <Field label="Atividade *">
             <input
-              value={form.title}
-              onChange={e => set("title", e.target.value)}
-              placeholder="Ex: Validação Biométrica em Tempo Real"
+              value={form.atividade}
+              onChange={e => set("atividade", e.target.value)}
+              placeholder="Ex: Atualização Cadastral com Fluxo de Consequência"
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
-              style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
+              style={inputStyle}
             />
           </Field>
 
           <Field label="Descrição">
             <textarea
-              value={form.description}
-              onChange={e => set("description", e.target.value)}
+              value={form.descricao}
+              onChange={e => set("descricao", e.target.value)}
               rows={2}
               className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none transition-all"
-              style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
+              style={inputStyle}
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Categoria">
-              <Select value={form.category} onChange={v => set("category", v as Category)} options={CATEGORIES} />
+            <Field label="Área / Frente">
+              <Select value={form.area!} onChange={v => set("area", v as Area)} options={AREAS} />
             </Field>
-            <Field label="Quarter de Entrega">
-              <Select value={form.quarter} onChange={v => set("quarter", v as Quarter)} options={QUARTERS} />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Status Inicial">
+            <Field label="Origem">
               <Select
-                value={form.status}
-                onChange={v => set("status", v as Status)}
-                options={["discovery", "backlog", "dev", "homolog", "done", "blocked"]}
-                labels={Object.fromEntries(KANBAN_COLS.map(s => [s, SC[s].label]))}
+                value={form.origem!}
+                onChange={v => handleDynamicSelect(v, "origem")}
+                options={[...origens, ADD_NEW]}
+                labels={{ [ADD_NEW]: "+ Adicionar nova..." }}
               />
-            </Field>
-            <Field label="Owner">
-              <Select value={form.owner} onChange={v => set("owner", v)} options={OWNERS.map(o => o.name)} />
             </Field>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Início">
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={e => set("startDate", e.target.value)}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", colorScheme: "dark" }}
+            <Field label="Tema Macro">
+              <Select
+                value={form.temaMacro!}
+                onChange={v => handleDynamicSelect(v, "temaMacro")}
+                options={[...temasMacro, ADD_NEW]}
+                labels={{ [ADD_NEW]: "+ Adicionar novo..." }}
               />
             </Field>
-            <Field label="Previsão de Entrega">
+            <Field label="Status">
+              <Select value={form.status!} onChange={v => set("status", v as FupStatus)} options={FUP_STATUSES} />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Focal">
+              <Select value={form.focal!} onChange={v => set("focal", v)} options={["", ...OWNERS]} labels={{ "": "— Sem focal —" }} />
+            </Field>
+            <Field label="Prioridade">
+              <Select value={form.prioridade!} onChange={v => set("prioridade", v as Prioridade)} options={PRIORIDADES} />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Início (Timeline)">
               <input
                 type="date"
-                value={form.endDate}
-                onChange={e => set("endDate", e.target.value)}
+                value={form.dataInicio}
+                onChange={e => set("dataInicio", e.target.value)}
                 className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
-                style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", colorScheme: "dark" }}
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="Data Limite">
+              <input
+                type="date"
+                value={form.dataLimite}
+                onChange={e => set("dataLimite", e.target.value)}
+                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
+                style={inputStyle}
               />
             </Field>
           </div>
 
-          <Field label="Épico Jira">
+          <Field label="Resumo de Status">
             <input
-              value={form.epicJira}
-              onChange={e => set("epicJira", e.target.value)}
-              placeholder="CAD-XXXX"
-              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none font-mono"
-              style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "JetBrains Mono, monospace" }}
+              value={form.resumoStatus}
+              onChange={e => set("resumoStatus", e.target.value)}
+              placeholder="Ex: Subida prevista para 11/08"
+              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
+              style={inputStyle}
             />
           </Field>
 
-          <Field label={`Progresso: ${form.progress}%`}>
+          <Field label="Dependências">
+            <input
+              value={form.dependencias}
+              onChange={e => set("dependencias", e.target.value)}
+              placeholder="Ex: API dos Correios; Squad Plataforma"
+              className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
+              style={inputStyle}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Link UX">
+              <input
+                value={form.linkUX}
+                onChange={e => set("linkUX", e.target.value)}
+                placeholder="https://figma.com/..."
+                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none font-mono"
+                style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace" }}
+              />
+            </Field>
+            <Field label="Link RoadMap / Épico">
+              <input
+                value={form.linkRoadMap}
+                onChange={e => set("linkRoadMap", e.target.value)}
+                placeholder="Roadmap: 2058 / TPLAT-805"
+                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none font-mono"
+                style={{ ...inputStyle, fontFamily: "JetBrains Mono, monospace" }}
+              />
+            </Field>
+          </div>
+
+          <Field label={`Progresso (Timeline): ${form.progresso ?? 0}%`}>
             <input
               type="range" min={0} max={100}
-              value={form.progress}
-              onChange={e => set("progress", Number(e.target.value))}
+              value={form.progresso ?? 0}
+              onChange={e => set("progresso", Number(e.target.value))}
               className="w-full accent-indigo-500"
               style={{ accentColor: "#6366F1" }}
             />
           </Field>
-
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.hasDependencies}
-              onChange={e => set("hasDependencies", e.target.checked)}
-              className="w-4 h-4 rounded accent-yellow-400"
-              style={{ accentColor: "#D97706" }}
-            />
-            <span className="text-sm" style={{ color: "#64748B" }}>Possui dependências</span>
-          </label>
         </div>
 
         {/* Actions */}
@@ -1014,7 +883,7 @@ function ProjectModal({ onClose, onSave, initial, owners }: ModalProps) {
           </button>
           <button
             onClick={handleSave}
-            disabled={!form.title.trim()}
+            disabled={!form.atividade?.trim()}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-40"
             style={{ background: "#6366F1", color: "#FFFFFF" }}
           >
@@ -1049,7 +918,7 @@ function Select({ value, onChange, options, labels }: {
       style={{ background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" }}
     >
       {options.map(o => (
-        <option key={o} value={o}>{labels ? labels[o] : o}</option>
+        <option key={o} value={o}>{labels?.[o] ?? o}</option>
       ))}
     </select>
   );
@@ -1057,8 +926,8 @@ function Select({ value, onChange, options, labels }: {
 
 // ─── Block Modal ──────────────────────────────────────────────────────────────
 
-function BlockModal({ project, onClose, onBlock }: { project: Project; onClose: () => void; onBlock: (id: string, reason: string) => void }) {
-  const [reason, setReason] = useState(project.blockedReason ?? "");
+function BlockModal({ project, onClose, onBlock }: { project: FupItem; onClose: () => void; onBlock: (id: string, reason: string) => void }) {
+  const [reason, setReason] = useState(project.status === "Bloqueado" ? project.resumoStatus : "");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.35)", backdropFilter: "blur(4px)" }}>
       <div className="w-full max-w-md rounded-2xl p-6 flex flex-col gap-5" style={{ background: "#FFFFFF", border: "1px solid rgba(239,68,68,0.3)" }}>
@@ -1068,10 +937,10 @@ function BlockModal({ project, onClose, onBlock }: { project: Project; onClose: 
           </div>
           <div>
             <h2 className="text-sm font-bold" style={{ color: "#1E293B" }}>Marcar como Bloqueado</h2>
-            <p className="text-xs" style={{ color: "#64748B" }}>{project.title}</p>
+            <p className="text-xs" style={{ color: "#64748B" }}>{project.atividade}</p>
           </div>
         </div>
-        <Field label="Motivo do Bloqueio">
+        <Field label="Motivo do Bloqueio (Resumo de Status)">
           <textarea
             value={reason}
             onChange={e => setReason(e.target.value)}
@@ -1100,108 +969,157 @@ function BlockModal({ project, onClose, onBlock }: { project: Project; onClose: 
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
+function areaFromHash(): Area {
+  const h = window.location.hash.toLowerCase();
+  if (h.includes("conta-corrente")) return "Conta Corrente";
+  if (h.includes("app")) return "APP";
+  return "Cadastro";
+}
+
 export default function App() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [owners, setOwners] = useState<Owner[]>([]);
+  const [projects, setProjects] = useState<FupItem[]>([]);
+  const [temasMacro, setTemasMacro] = useState<string[]>(TEMAS_MACRO_INICIAIS);
+  const [origens, setOrigens] = useState<string[]>(ORIGENS_INICIAIS);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Área ativa (páginas: Cadastro | Conta Corrente | APP)
+  const [area, setArea] = useState<Area>(areaFromHash());
+
+  async function loadAll() {
+    try {
+      const [{ data: rows, error: pErr }, { data: listas, error: lErr }] = await Promise.all([
+        supabase.from("fup_items").select("*").order("created_at", { ascending: true }),
+        supabase.from("listas").select("*"),
+      ]);
+      if (pErr) throw pErr;
+      if (lErr) throw lErr;
+      setProjects((rows ?? []).map(rowToFup));
+      const temas = (listas ?? []).filter((l: any) => l.tipo === "temaMacro").map((l: any) => l.valor);
+      const orgs = (listas ?? []).filter((l: any) => l.tipo === "origem").map((l: any) => l.valor);
+      if (temas.length) setTemasMacro(temas);
+      if (orgs.length) setOrigens(orgs);
+      setLoadError(null);
+    } catch (e: any) {
+      console.error("Erro ao carregar dados do Supabase:", e);
+      setLoadError(e?.message ?? "Erro ao conectar ao banco de dados");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const { data: users, error: uErr } = await supabase
-          .from("usuarios").select("*").order("created_at", { ascending: true });
-        if (uErr) throw uErr;
-        const loadedOwners: Owner[] = (users ?? []).map((u: any, i: number) => ({
-          id: u.id,
-          name: u.nome,
-          initials: u.iniciais || initialsOf(u.nome),
-          color: OWNER_PALETTE[i % OWNER_PALETTE.length],
-        }));
-        const { data: rows, error: pErr } = await supabase
-          .from("projetos").select("*").order("created_at", { ascending: true });
-        if (pErr) throw pErr;
-        setOwners(loadedOwners);
-        setProjects((rows ?? []).map((r: any) => rowToProject(r, loadedOwners)));
-        setLoadError(null);
-      } catch (e: any) {
-        console.error("Erro ao carregar dados do Supabase:", e);
-        setLoadError(e?.message ?? "Erro ao conectar ao banco de dados");
-      } finally {
-        setLoading(false);
-      }
-    })();
+    loadAll();
+
+    // Sincronização em tempo real: alterações feitas no Controle de Demandas
+    // (ou em outra aba) refletem aqui automaticamente.
+    const channel = supabase
+      .channel("dash-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "fup_items" }, () => loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "listas" }, () => loadAll())
+      .subscribe();
+
+    const onHash = () => setArea(areaFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("hashchange", onHash);
+    };
   }, []);
 
+  function selectArea(a: Area) {
+    setArea(a);
+    const slug = a === "Conta Corrente" ? "conta-corrente" : a.toLowerCase();
+    window.location.hash = `/${slug}`;
+  }
+
   async function persistUpdate(id: string, fields: Record<string, any>) {
-    const { error } = await supabase.from("projetos").update(fields).eq("id", id);
+    const { error } = await supabase.from("fup_items").update(fields).eq("id", id);
     if (error) console.error("Erro ao salvar no Supabase:", error);
   }
+
+  async function addLista(tipo: "temaMacro" | "origem", valor: string) {
+    if (tipo === "temaMacro") setTemasMacro(ts => ts.includes(valor) ? ts : [...ts, valor]);
+    else setOrigens(os => os.includes(valor) ? os : [...os, valor]);
+    const { error } = await supabase.from("listas").upsert({ tipo, valor }, { onConflict: "tipo,valor" });
+    if (error) console.error("Erro ao salvar lista:", error);
+  }
+
   const [view, setView] = useState<View>("roadmap");
   const [search, setSearch] = useState("");
-  const [filterQuarter, setFilterQuarter] = useState("all");
-  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterTema, setFilterTema] = useState("all");
+  const [filterOrigem, setFilterOrigem] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterPrioridade, setFilterPrioridade] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [editProject, setEditProject] = useState<Project | null>(null);
-  const [blockProject, setBlockProject] = useState<Project | null>(null);
+  const [editProject, setEditProject] = useState<FupItem | null>(null);
+  const [blockProject, setBlockProject] = useState<FupItem | null>(null);
 
-  const filtered = projects.filter(p =>
-    search === "" || p.title.toLowerCase().includes(search.toLowerCase()) || p.epicJira.toLowerCase().includes(search.toLowerCase())
+  const areaProjects = useMemo(() => projects.filter(p => p.area === area), [projects, area]);
+
+  const filtered = areaProjects.filter(p =>
+    (search === "" ||
+      p.atividade.toLowerCase().includes(search.toLowerCase()) ||
+      p.linkRoadMap.toLowerCase().includes(search.toLowerCase())) &&
+    (filterTema === "all" || p.temaMacro === filterTema) &&
+    (filterOrigem === "all" || p.origem === filterOrigem) &&
+    (filterStatus === "all" || p.status === filterStatus) &&
+    (filterPrioridade === "all" || p.prioridade === filterPrioridade)
   );
 
-  function moveProject(id: string, status: Status) {
+  function moveProject(id: string, status: FupStatus) {
     setProjects(ps => ps.map(p => p.id === id ? { ...p, status } : p));
     persistUpdate(id, { status });
   }
 
   function unblockProject(id: string) {
-    setProjects(ps => ps.map(p => p.id === id ? { ...p, status: "dev", blockedReason: undefined } : p));
-    persistUpdate(id, { status: "dev", mensagem_alerta: null });
+    setProjects(ps => ps.map(p => p.id === id ? { ...p, status: "Desenv. Técnico" as FupStatus, resumoStatus: "" } : p));
+    persistUpdate(id, { status: "Desenv. Técnico", resumo_status: "" });
   }
 
   function deleteProject(id: string) {
     setProjects(ps => ps.filter(p => p.id !== id));
-    supabase.from("projetos").delete().eq("id", id)
+    supabase.from("fup_items").delete().eq("id", id)
       .then(({ error }) => { if (error) console.error("Erro ao excluir no Supabase:", error); });
   }
 
-  async function saveProject(data: Partial<Project>) {
+  async function saveProject(data: Partial<FupItem>) {
     if (editProject) {
       const merged = { ...editProject, ...data };
       setProjects(ps => ps.map(p => p.id === editProject.id ? merged : p));
       setEditProject(null);
-      persistUpdate(editProject.id, projectToRow(merged, owners));
+      persistUpdate(editProject.id, fupToRow(merged));
     } else {
       setCreateOpen(false);
-      const row = projectToRow({ ...data, tags: data.tags ?? [] }, owners);
       const { data: inserted, error } = await supabase
-        .from("projetos").insert(row).select().single();
+        .from("fup_items").insert(fupToRow(data)).select().single();
       if (error || !inserted) {
         console.error("Erro ao criar projeto no Supabase:", error);
         alert("Erro ao salvar o projeto no banco de dados. Tente novamente.");
         return;
       }
-      setProjects(ps => [...ps, rowToProject(inserted, owners)]);
+      setProjects(ps => [...ps, rowToFup(inserted)]);
     }
   }
 
   function blockConfirm(id: string, reason: string) {
-    setProjects(ps => ps.map(p => p.id === id ? { ...p, status: "blocked", blockedReason: reason } : p));
+    setProjects(ps => ps.map(p => p.id === id ? { ...p, status: "Bloqueado" as FupStatus, resumoStatus: reason } : p));
     setBlockProject(null);
-    persistUpdate(id, { status: "blocked", mensagem_alerta: reason });
+    persistUpdate(id, { status: "Bloqueado", resumo_status: reason });
   }
 
-  const blockedCount = projects.filter(p => p.status === "blocked").length;
-  const doneCount = projects.filter(p => p.status === "done").length;
-  const devCount = projects.filter(p => p.status === "dev").length;
+  const blockedCount = areaProjects.filter(p => p.status === "Bloqueado").length;
+  const doneCount = areaProjects.filter(p => p.status === "Concluído").length;
+  const andamentoCount = areaProjects.filter(p => emAndamento(p.status)).length;
 
   const VIEWS: { id: View; label: string; icon: React.ReactNode }[] = [
     { id: "roadmap",   label: "Roadmap",  icon: <LayoutGrid size={14} /> },
     { id: "timeline",  label: "Timeline", icon: <BarChart3 size={14} /> },
-    { id: "dashboard", label: "Dashboard", icon: <Activity size={14} /> },
+    { id: "dashboard", label: "Controle de Vertical", icon: <Activity size={14} /> },
   ];
+
+  const hasActiveFilters = filterTema !== "all" || filterOrigem !== "all" || filterStatus !== "all" || filterPrioridade !== "all" || search;
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "#F4F6FB", fontFamily: "Inter, sans-serif" }}>
@@ -1210,13 +1128,30 @@ export default function App() {
       <header className="flex-shrink-0 border-b px-6 py-3 flex items-center gap-4" style={{ borderColor: "rgba(15,23,42,0.07)", background: "#FFFFFF" }}>
         {/* Brand */}
         <div className="flex items-center gap-3 pr-6 border-r" style={{ borderColor: "rgba(15,23,42,0.07)" }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#6366F1,#8B5CF6)" }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `linear-gradient(135deg,${AREA_CFG[area].color},#8B5CF6)` }}>
             <Target size={16} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold leading-tight" style={{ color: "#1E293B" }}>Squad Cadastro</p>
-            <p className="text-xs leading-tight" style={{ color: "#94A3B8" }}>Agibank · Roadmap 2025</p>
+            <p className="text-sm font-bold leading-tight" style={{ color: "#1E293B" }}>Vertical {area}</p>
+            <p className="text-xs leading-tight" style={{ color: "#94A3B8" }}>Agibank · Dash Unificado</p>
           </div>
+        </div>
+
+        {/* Area selector (páginas por frente) */}
+        <div className="flex items-center gap-1 rounded-xl p-1" style={{ background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.06)" }}>
+          {AREAS.map(a => (
+            <button
+              key={a}
+              onClick={() => selectArea(a)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+              style={{
+                background: area === a ? AREA_CFG[a].color : "transparent",
+                color: area === a ? "#FFFFFF" : "#94A3B8",
+              }}
+            >
+              {AREA_CFG[a].short}
+            </button>
+          ))}
         </div>
 
         {/* View switcher */}
@@ -1225,7 +1160,7 @@ export default function App() {
             <button
               key={v.id}
               onClick={() => setView(v.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 whitespace-nowrap"
               style={{
                 background: view === v.id ? "#EEF2F7" : "transparent",
                 color: view === v.id ? "#1E293B" : "#94A3B8",
@@ -1239,7 +1174,7 @@ export default function App() {
 
         {/* Quick stats */}
         <div className="hidden lg:flex items-center gap-4 ml-2">
-          <Stat label="Em Dev" value={devCount} color="#EA580C" />
+          <Stat label="Em Andamento" value={andamentoCount} color="#EA580C" />
           <Stat label="Concluídos" value={doneCount} color="#10B981" />
           {blockedCount > 0 && <Stat label="Bloqueados" value={blockedCount} color="#EF4444" pulse />}
         </div>
@@ -1252,7 +1187,7 @@ export default function App() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar projeto ou épico..."
+            placeholder="Buscar atividade ou roadmap..."
             className="pl-8 pr-3 py-2 rounded-xl text-xs outline-none w-52 transition-all focus:w-64"
             style={{ background: "rgba(15,23,42,0.05)", border: "1px solid rgba(15,23,42,0.08)", color: "#1E293B" }}
           />
@@ -1283,16 +1218,14 @@ export default function App() {
 
       {/* Filter bar */}
       {showFilters && (
-        <div className="flex-shrink-0 flex items-center gap-4 px-6 py-3 border-b" style={{ borderColor: "rgba(15,23,42,0.05)", background: "#F4F6FB" }}>
-          <FilterSelect label="Quarter" value={filterQuarter} onChange={setFilterQuarter} options={["all", ...QUARTERS]} labels={{ all: "Todos os Quarters" }} />
-          <FilterSelect label="Categoria" value={filterCategory} onChange={setFilterCategory} options={["all", ...CATEGORIES]} labels={{ all: "Todas as Categorias" }} />
-          <FilterSelect label="Status" value={filterStatus} onChange={setFilterStatus}
-            options={["all", ...KANBAN_COLS]}
-            labels={{ all: "Todos os Status", ...Object.fromEntries(KANBAN_COLS.map(s => [s, SC[s].label])) }}
-          />
-          {(filterQuarter !== "all" || filterCategory !== "all" || filterStatus !== "all" || search) && (
+        <div className="flex-shrink-0 flex items-center gap-4 px-6 py-3 border-b flex-wrap" style={{ borderColor: "rgba(15,23,42,0.05)", background: "#F4F6FB" }}>
+          <FilterSelect label="Tema Macro" value={filterTema} onChange={setFilterTema} options={["all", ...temasMacro]} labels={{ all: "Todos os Temas" }} />
+          <FilterSelect label="Origem" value={filterOrigem} onChange={setFilterOrigem} options={["all", ...origens]} labels={{ all: "Todas as Origens" }} />
+          <FilterSelect label="Status" value={filterStatus} onChange={setFilterStatus} options={["all", ...FUP_STATUSES]} labels={{ all: "Todos os Status" }} />
+          <FilterSelect label="Prioridade" value={filterPrioridade} onChange={setFilterPrioridade} options={["all", ...PRIORIDADES]} labels={{ all: "Todas" }} />
+          {hasActiveFilters && (
             <button
-              onClick={() => { setFilterQuarter("all"); setFilterCategory("all"); setFilterStatus("all"); setSearch(""); }}
+              onClick={() => { setFilterTema("all"); setFilterOrigem("all"); setFilterStatus("all"); setFilterPrioridade("all"); setSearch(""); }}
               className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg transition-colors"
               style={{ color: "#EF4444", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}
             >
@@ -1300,7 +1233,7 @@ export default function App() {
             </button>
           )}
           <span className="ml-auto text-xs font-mono" style={{ color: "#94A3B8" }}>
-            {filtered.length} de {projects.length} projetos
+            {filtered.length} de {areaProjects.length} projetos
           </span>
         </div>
       )}
@@ -1322,9 +1255,6 @@ export default function App() {
         {view === "roadmap" && (
           <RoadmapView
             projects={filtered}
-            filterQuarter={filterQuarter}
-            filterCategory={filterCategory}
-            filterStatus={filterStatus}
             onMove={moveProject}
             onEdit={setEditProject}
             onDelete={deleteProject}
@@ -1340,17 +1270,34 @@ export default function App() {
         )}
         {view === "dashboard" && (
           <div className="h-full overflow-y-auto">
-            <DashboardView projects={filtered} />
+            <DashboardView projects={filtered} onCadastro={() => setCreateOpen(true)} />
           </div>
         )}
       </main>
 
-      {/* Modals */}
+      {/* Modals (fluxo de cadastro de projetos — único para todas as telas) */}
       {createOpen && (
-        <ProjectModal onClose={() => setCreateOpen(false)} onSave={saveProject} owners={owners} />
+        <ProjectModal
+          onClose={() => setCreateOpen(false)}
+          onSave={saveProject}
+          defaultArea={area}
+          temasMacro={temasMacro}
+          origens={origens}
+          onAddTema={v => addLista("temaMacro", v)}
+          onAddOrigem={v => addLista("origem", v)}
+        />
       )}
       {editProject && (
-        <ProjectModal onClose={() => setEditProject(null)} onSave={saveProject} initial={editProject} owners={owners} />
+        <ProjectModal
+          onClose={() => setEditProject(null)}
+          onSave={saveProject}
+          initial={editProject}
+          defaultArea={area}
+          temasMacro={temasMacro}
+          origens={origens}
+          onAddTema={v => addLista("temaMacro", v)}
+          onAddOrigem={v => addLista("origem", v)}
+        />
       )}
       {blockProject && (
         <BlockModal project={blockProject} onClose={() => setBlockProject(null)} onBlock={blockConfirm} />
