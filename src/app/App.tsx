@@ -18,6 +18,7 @@ import {
   emAndamento, ownerColor, initialsOf, NEXT_STATUS,
   rowToFup, fupToRow,
 } from "./dicionario";
+import { ExportPptModal } from "./exportPpt";
 
 // ─── Supabase (BASE ÚNICA do Dash — projeto do usuário, compartilhada com o
 //     Controle de Demandas) ──────────────────────────────────────────────────
@@ -1056,6 +1057,7 @@ export default function App() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editProject, setEditProject] = useState<FupItem | null>(null);
   const [blockProject, setBlockProject] = useState<FupItem | null>(null);
+  const [pptOpen, setPptOpen] = useState(false);
 
   const areaProjects = useMemo(() => projects.filter(p => p.area === area), [projects, area]);
 
@@ -1207,6 +1209,15 @@ export default function App() {
           <Filter size={13} /> Filtros
         </button>
 
+        {/* Exportar PPT */}
+        <button
+          onClick={() => setPptOpen(true)}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: "linear-gradient(135deg,#0033B0,#0050E0)", color: "#fff", boxShadow: "0 4px 16px rgba(0,51,176,0.35)" }}
+        >
+          <ClipboardList size={14} /> Exportar PPT
+        </button>
+
         {/* New project */}
         <button
           onClick={() => setCreateOpen(true)}
@@ -1302,6 +1313,9 @@ export default function App() {
       )}
       {blockProject && (
         <BlockModal project={blockProject} onClose={() => setBlockProject(null)} onBlock={blockConfirm} />
+      )}
+      {pptOpen && (
+        <ExportPptModal projects={areaProjects} area={area} onClose={() => setPptOpen(false)} />
       )}
     </div>
   );
