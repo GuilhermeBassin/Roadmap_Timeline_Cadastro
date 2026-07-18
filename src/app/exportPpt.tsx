@@ -79,6 +79,117 @@ async function pptLogoPng(): Promise<string | null> {
   }
 }
 
+// Cores da Timeline por status (barra clara + texto/borda na cor do status)
+const PPT_TL_CORES: Record<string, { bar: string; line: string }> = {
+  "Discovery": { bar: "EDE9FE", line: "9333EA" },
+  "Handover": { bar: "E0F2FE", line: "0284C7" },
+  "Refin. Técnico": { bar: "CCFBF1", line: "0D9488" },
+  "Desenv. UX": { bar: "FCE7F3", line: "DB2777" },
+  "Desenv. Técnico": { bar: "FFEDD5", line: "EA580C" },
+  "Teste": { bar: "FEF3C7", line: "D97706" },
+};
+
+const PPT_MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+function addTimelineSlides(
+  pptx: PptxGenJS,
+  itens: FupItem[],
+  logo: string | null,
+  periodo: string,
+  area: Area,
+  inicio: Date,
+  fim: Date,
+) {
+  // Escala de meses: do 1º dia do mês da data inicial ao último dia do mês da data final
+  const scaleStart = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  const scaleEnd = new Date(fim.getFullYear(), fim.getMonth() + 1, 0);
+  const totalMs = scaleEnd.getTime() - scaleStart.getTime();
+  const nMeses = (fim.getFullYear() - inicio.getFullYear()) * 12 + (fim.getMonth() - inicio.getMonth()) + 1;
+
+  const chartX = 3.55, chartW = 12.98 - chartX;
+  const rowH = 0.52, rowGap = 0.06, chartY = 1.65;
+  const porPagina = 9;
+
+  const frac = (d: Date) =>
+    Math.max(0, Math.min(1, (d.getTime() - scaleStart.getTime()) / totalMs));
+
+  const totalPaginas = Math.ceil(itens.length / porPagina);
+  for (let pg = 0; pg < totalPaginas; pg++) {
+    const slide = pptx.addSlide();
+    slide.background = { color: "FFFFFF" };
+    slide.addShape("rect", { x: 0, y: 0, w: 13.33, h: 0.85, fill: { color: AGI_PPT_BLUE } });
+    slide.addShape("rect", { x: 0, y: 0.85, w: 13.33, h: 0.05, fill: { color: AGI_PPT_GREEN } });
+    if (logo) slide.addImage({ data: logo, x: 0.35, y: 0.14, w: 0.92, h: 0.57 });
+    slide.addText(`Timeline — Vertical ${area}`, { x: 1.5, y: 0.12, w: 9.5, h: 0.4, color: "FFFFFF", fontSize: 20, bold: true, fontFace: "Arial" });
+    slide.addText(`Período: ${periodo} · ordenado por prioridade`, { x: 1.5, y: 0.5, w: 8, h: 0.3, color: "C7D8F5", fontSize: 11, fontFace: "Arial" });
+    slide.addText(`${pg + 1} / ${totalPaginas}`, { x: 12.2, y: 0.25, w: 0.9, h: 0.35, color: "FFFFFF", fontSize: 12, align: "right", fontFace: "Arial" });
+
+    const pagina = itens.slice(pg * porPagina, (pg + 1) * porPagina);
+    const gridBottom = chartY + pagina.length * (rowH + rowGap) + 0.1;
+
+    // 1) Fundo zebrado das linhas
+    pagina.forEach((_item, i) => {
+      const y = chartY + i * (rowH + rowGap);
+      const zebra = i % 2 === 0 ? "FFFFFF" : "F8FAFC";
+      slide.addShape("rect", { x: 0.35, y, w: 12.63, h: rowH, fill: { color: zebra }, line: { color: "EEF2F7", width: 0.5 } });
+    });
+
+    // 2) Cabeçalho dos meses + gridlines (por cima do fundo)
+    for (let m = 0; m < nMeses; m++) {
+      const mDate = new Date(scaleStart.getFullYear(), scaleStart.getMonth() + m, 1);
+      const x = chartX + (chartW * m) / nMeses;
+      const wCol = chartW / nMeses;
+      slide.addText(`${PPT_MESES[mDate.getMonth()]}/${String(mDate.getFullYear()).slice(2)}`, {
+        x, y: 1.15, w: wCol, h: 0.3, align: "center", color: "94A3B8", fontSize: 9, fontFace: "Arial",
+      });
+      slide.addShape("line", { x, y: 1.45, w: 0, h: gridBottom - 1.45, line: { color: "E2E8F0", width: 0.75 } });
+    }
+    slide.addShape("line", { x: chartX + chartW, y: 1.45, w: 0, h: gridBottom - 1.45, line: { color: "E2E8F0", width: 0.75 } });
+
+    // 3) Conteúdo das linhas (rótulos e barras)
+    pagina.forEach((item, i) => {
+      const y = chartY + i * (rowH + rowGap);
+      const tl = PPT_TL_CORES[item.status] || { bar: "E2E8F0", line: "64748B" };
+      slide.addText(item.atividade || "—", {
+        x: 0.45, y, w: 2.45, h: rowH, color: "334155", fontSize: 9, bold: true, valign: "middle", fontFace: "Arial",
+      });
+      slide.addText(item.status, {
+        x: 2.95, y, w: 0.62, h: rowH, color: tl.line, fontSize: 7, valign: "middle", fontFace: "Arial",
+      });
+
+      // Barra: dataInicio (ou dataLimite) → dataLimite (ou dataInicio), recortada à escala
+      const ini = pptParseData(item.dataInicio || "") ?? pptParseData(item.dataLimite);
+      const fimItem = pptParseData(item.dataLimite) ?? ini;
+      if (!ini || !fimItem) return;
+      const f0 = frac(ini.getTime() <= fimItem.getTime() ? ini : fimItem);
+      const f1 = frac(fimItem.getTime() >= ini.getTime() ? fimItem : ini);
+      const bx = chartX + chartW * f0;
+      const bw = Math.max(0.12, chartW * (f1 - f0));
+      slide.addShape("roundRect", {
+        x: bx, y: y + 0.08, w: bw, h: rowH - 0.16, rectRadius: 0.06,
+        fill: { color: tl.bar }, line: { color: tl.line, width: 1 },
+      });
+      const prog = Math.max(0, Math.min(100, Number(item.progresso ?? 0)));
+      if (prog > 0) {
+        slide.addShape("roundRect", {
+          x: bx, y: y + 0.08, w: Math.max(0.05, bw * (prog / 100)), h: rowH - 0.16, rectRadius: 0.06,
+          fill: { color: tl.line, transparency: 55 },
+        });
+      }
+      slide.addText(`${prog}%`, {
+        x: bx + 0.04, y: y + 0.08, w: Math.max(0.5, bw - 0.08), h: rowH - 0.16,
+        color: tl.line, fontSize: 8, bold: true, valign: "middle", fontFace: "Arial",
+      });
+      // Losango no prazo (dataLimite)
+      const fPrazo = frac(fimItem);
+      slide.addShape("diamond", {
+        x: chartX + chartW * fPrazo - 0.05, y: y + rowH / 2 - 0.05, w: 0.1, h: 0.1,
+        fill: { color: tl.line },
+      });
+    });
+  }
+}
+
 export async function gerarPowerPoint(projects: FupItem[], area: Area, dataInicio: string, dataFim: string): Promise<number> {
   const inicio = pptParseData(dataInicio);
   const fim = pptParseData(dataFim);
@@ -162,6 +273,9 @@ export async function gerarPowerPoint(projects: FupItem[], area: Area, dataInici
       fontFace: "Arial",
     });
   }
+
+  // Slides de Timeline (Gantt) — mesmos projetos, mesma ordenação
+  addTimelineSlides(pptx, itens, logo, periodo, area, inicio, fim);
 
   const nomeArquivo = `Projetos_Em_Andamento_${area.replace(/\s+/g, "_")}_${dataInicio}_a_${dataFim}.pptx`;
   await pptx.writeFile({ fileName: nomeArquivo });
