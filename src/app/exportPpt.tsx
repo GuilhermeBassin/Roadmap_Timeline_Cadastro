@@ -79,113 +79,158 @@ async function pptLogoPng(): Promise<string | null> {
   }
 }
 
-// Cores da Timeline por status (barra clara + texto/borda na cor do status)
-const PPT_TL_CORES: Record<string, { bar: string; line: string }> = {
-  "Discovery": { bar: "EDE9FE", line: "9333EA" },
-  "Handover": { bar: "E0F2FE", line: "0284C7" },
-  "Refin. Técnico": { bar: "CCFBF1", line: "0D9488" },
-  "Desenv. UX": { bar: "FCE7F3", line: "DB2777" },
-  "Desenv. Técnico": { bar: "FFEDD5", line: "EA580C" },
-  "Teste": { bar: "FEF3C7", line: "D97706" },
-};
+// ── Timeline no padrão oficial (painéis mensais, semanas, "Estamos aqui") ────
 
-const PPT_MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const PPT_TL_AZUL = "1D63F2";      // Desenvolvimento
+const PPT_TL_LARANJA = "F5A623";   // Homologação (Teste)
+const PPT_TL_CINZA = "9AA0A6";     // Arquitetura/Refinamento
+const PPT_TL_VERDE = "7CCB86";     // "Estamos aqui"
+const PPT_TL_PAINEL = "F1F3F6";
+
+function tlBarColor(status: string): string {
+  if (status === "Teste") return PPT_TL_LARANJA;
+  if (status === "Desenv. UX" || status === "Desenv. Técnico") return PPT_TL_AZUL;
+  return PPT_TL_CINZA; // Discovery, Handover, Refin. Técnico
+}
+
+function tlIcon(item: FupItem): string {
+  if (item.status === "Concluído") return "✅";
+  if (item.status === "Bloqueado") return "⚠";
+  if ((item.origem || "").toLowerCase().includes("negóc")) return "💼";
+  return "⚙";
+}
+
+function tlQuarterLabel(inicio: Date, fim: Date): string {
+  const q1 = Math.floor(inicio.getMonth() / 3) + 1;
+  const q2 = Math.floor(fim.getMonth() / 3) + 1;
+  if (inicio.getFullYear() === fim.getFullYear() && q1 === q2) return `Q${q1}`;
+  const f = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return `${f(inicio)} a ${f(fim)}`;
+}
 
 function addTimelineSlides(
   pptx: PptxGenJS,
   itens: FupItem[],
   logo: string | null,
-  periodo: string,
+  _periodo: string,
   area: Area,
   inicio: Date,
   fim: Date,
 ) {
-  // Escala de meses: do 1º dia do mês da data inicial ao último dia do mês da data final
-  const scaleStart = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
-  const scaleEnd = new Date(fim.getFullYear(), fim.getMonth() + 1, 0);
+  // Escala semanal: da segunda-feira da semana da data inicial até o fim do período
+  const scaleStart = new Date(inicio);
+  scaleStart.setDate(scaleStart.getDate() - ((scaleStart.getDay() + 6) % 7)); // segunda
+  const weeks: Date[] = [];
+  for (let d = new Date(scaleStart); d.getTime() <= fim.getTime(); d.setDate(d.getDate() + 7)) {
+    weeks.push(new Date(d));
+  }
+  if (weeks.length === 0) weeks.push(new Date(scaleStart));
+  const scaleEnd = new Date(weeks[weeks.length - 1]);
+  scaleEnd.setDate(scaleEnd.getDate() + 7);
   const totalMs = scaleEnd.getTime() - scaleStart.getTime();
-  const nMeses = (fim.getFullYear() - inicio.getFullYear()) * 12 + (fim.getMonth() - inicio.getMonth()) + 1;
+  const frac = (d: Date) => Math.max(0, Math.min(1, (d.getTime() - scaleStart.getTime()) / totalMs));
 
-  const chartX = 3.55, chartW = 12.98 - chartX;
-  const rowH = 0.52, rowGap = 0.06, chartY = 1.65;
-  const porPagina = 9;
+  const areaX = 0.35, areaW = 12.63;
+  const panelY = 0.95, panelH = 5.0;
+  const colW = areaW / weeks.length;
+  const rowH = 0.58, rowsY = 1.75, porPagina = 7;
 
-  const frac = (d: Date) =>
-    Math.max(0, Math.min(1, (d.getTime() - scaleStart.getTime()) / totalMs));
+  // Painéis por mês (semanas contíguas do mesmo mês)
+  const panels: { start: number; end: number }[] = [];
+  weeks.forEach((w, i) => {
+    const last = panels[panels.length - 1];
+    if (last && weeks[last.end].getMonth() === w.getMonth() && weeks[last.end].getFullYear() === w.getFullYear()) {
+      last.end = i;
+    } else {
+      panels.push({ start: i, end: i });
+    }
+  });
+
+  const hoje = new Date();
+  const titulo = `${area} – Projetos ${tlQuarterLabel(inicio, fim)}`;
 
   const totalPaginas = Math.ceil(itens.length / porPagina);
   for (let pg = 0; pg < totalPaginas; pg++) {
     const slide = pptx.addSlide();
     slide.background = { color: "FFFFFF" };
-    slide.addShape("rect", { x: 0, y: 0, w: 13.33, h: 0.85, fill: { color: AGI_PPT_BLUE } });
-    slide.addShape("rect", { x: 0, y: 0.85, w: 13.33, h: 0.05, fill: { color: AGI_PPT_GREEN } });
-    if (logo) slide.addImage({ data: logo, x: 0.35, y: 0.14, w: 0.92, h: 0.57 });
-    slide.addText(`Timeline — Vertical ${area}`, { x: 1.5, y: 0.12, w: 9.5, h: 0.4, color: "FFFFFF", fontSize: 20, bold: true, fontFace: "Arial" });
-    slide.addText(`Período: ${periodo} · ordenado por prioridade`, { x: 1.5, y: 0.5, w: 8, h: 0.3, color: "C7D8F5", fontSize: 11, fontFace: "Arial" });
-    slide.addText(`${pg + 1} / ${totalPaginas}`, { x: 12.2, y: 0.25, w: 0.9, h: 0.35, color: "FFFFFF", fontSize: 12, align: "right", fontFace: "Arial" });
 
-    const pagina = itens.slice(pg * porPagina, (pg + 1) * porPagina);
-    const gridBottom = chartY + pagina.length * (rowH + rowGap) + 0.1;
+    // Título + logo
+    slide.addText(titulo, { x: areaX, y: 0.18, w: 9.5, h: 0.55, color: PPT_TL_AZUL, fontSize: 26, bold: true, fontFace: "Arial" });
+    if (logo) {
+      slide.addShape("roundRect", { x: 12.06, y: 0.18, w: 0.95, h: 0.6, rectRadius: 0.12, fill: { color: AGI_PPT_BLUE } });
+      slide.addImage({ data: logo, x: 12.2, y: 0.28, w: 0.66, h: 0.41 });
+    }
+    if (totalPaginas > 1) {
+      slide.addText(`${pg + 1} / ${totalPaginas}`, { x: 11.0, y: 0.3, w: 0.9, h: 0.35, color: "94A3B8", fontSize: 11, align: "right", fontFace: "Arial" });
+    }
 
-    // 1) Fundo zebrado das linhas
-    pagina.forEach((_item, i) => {
-      const y = chartY + i * (rowH + rowGap);
-      const zebra = i % 2 === 0 ? "FFFFFF" : "F8FAFC";
-      slide.addShape("rect", { x: 0.35, y, w: 12.63, h: rowH, fill: { color: zebra }, line: { color: "EEF2F7", width: 0.5 } });
+    // Painéis mensais
+    for (const p of panels) {
+      const px = areaX + p.start * colW + 0.03;
+      const pw = (p.end - p.start + 1) * colW - 0.06;
+      slide.addShape("roundRect", { x: px, y: panelY, w: pw, h: panelH, rectRadius: 0.12, fill: { color: PPT_TL_PAINEL } });
+    }
+
+    // Semanas: círculo + data dd/mm
+    weeks.forEach((w, i) => {
+      const cx = areaX + i * colW + colW / 2;
+      slide.addShape("ellipse", { x: cx - 0.1, y: 1.08, w: 0.2, h: 0.2, fill: { color: "FFFFFF" }, line: { color: "D8DEE8", width: 0.75 } });
+      slide.addText(`${String(w.getDate()).padStart(2, "0")}/${String(w.getMonth() + 1).padStart(2, "0")}`, {
+        x: cx - colW / 2, y: 1.3, w: colW, h: 0.25, align: "center", color: "334155", fontSize: 9, bold: true, fontFace: "Arial",
+      });
     });
 
-    // 2) Cabeçalho dos meses + gridlines (por cima do fundo)
-    for (let m = 0; m < nMeses; m++) {
-      const mDate = new Date(scaleStart.getFullYear(), scaleStart.getMonth() + m, 1);
-      const x = chartX + (chartW * m) / nMeses;
-      const wCol = chartW / nMeses;
-      slide.addText(`${PPT_MESES[mDate.getMonth()]}/${String(mDate.getFullYear()).slice(2)}`, {
-        x, y: 1.15, w: wCol, h: 0.3, align: "center", color: "94A3B8", fontSize: 9, fontFace: "Arial",
-      });
-      slide.addShape("line", { x, y: 1.45, w: 0, h: gridBottom - 1.45, line: { color: "E2E8F0", width: 0.75 } });
-    }
-    slide.addShape("line", { x: chartX + chartW, y: 1.45, w: 0, h: gridBottom - 1.45, line: { color: "E2E8F0", width: 0.75 } });
-
-    // 3) Conteúdo das linhas (rótulos e barras)
+    // Linhas de projetos: nome com ícone + barra
+    const pagina = itens.slice(pg * porPagina, (pg + 1) * porPagina);
     pagina.forEach((item, i) => {
-      const y = chartY + i * (rowH + rowGap);
-      const tl = PPT_TL_CORES[item.status] || { bar: "E2E8F0", line: "64748B" };
-      slide.addText(item.atividade || "—", {
-        x: 0.45, y, w: 2.45, h: rowH, color: "334155", fontSize: 9, bold: true, valign: "middle", fontFace: "Arial",
+      const y = rowsY + i * rowH;
+      slide.addText(`${tlIcon(item)} ${item.atividade || "—"}`, {
+        x: areaX + 0.15, y, w: 8.5, h: 0.28, color: PPT_TL_AZUL, fontSize: 11.5, bold: true, fontFace: "Arial",
       });
-      slide.addText(item.status, {
-        x: 2.95, y, w: 0.62, h: rowH, color: tl.line, fontSize: 7, valign: "middle", fontFace: "Arial",
-      });
-
-      // Barra: dataInicio (ou dataLimite) → dataLimite (ou dataInicio), recortada à escala
       const ini = pptParseData(item.dataInicio || "") ?? pptParseData(item.dataLimite);
       const fimItem = pptParseData(item.dataLimite) ?? ini;
       if (!ini || !fimItem) return;
       const f0 = frac(ini.getTime() <= fimItem.getTime() ? ini : fimItem);
       const f1 = frac(fimItem.getTime() >= ini.getTime() ? fimItem : ini);
-      const bx = chartX + chartW * f0;
-      const bw = Math.max(0.12, chartW * (f1 - f0));
+      const bx = areaX + areaW * f0;
+      const bw = Math.max(0.15, areaW * (f1 - f0));
       slide.addShape("roundRect", {
-        x: bx, y: y + 0.08, w: bw, h: rowH - 0.16, rectRadius: 0.06,
-        fill: { color: tl.bar }, line: { color: tl.line, width: 1 },
+        x: bx, y: y + 0.31, w: bw, h: 0.13, rectRadius: 0.06, fill: { color: tlBarColor(item.status) },
       });
-      const prog = Math.max(0, Math.min(100, Number(item.progresso ?? 0)));
-      if (prog > 0) {
-        slide.addShape("roundRect", {
-          x: bx, y: y + 0.08, w: Math.max(0.05, bw * (prog / 100)), h: rowH - 0.16, rectRadius: 0.06,
-          fill: { color: tl.line, transparency: 55 },
-        });
-      }
-      slide.addText(`${prog}%`, {
-        x: bx + 0.04, y: y + 0.08, w: Math.max(0.5, bw - 0.08), h: rowH - 0.16,
-        color: tl.line, fontSize: 8, bold: true, valign: "middle", fontFace: "Arial",
-      });
-      // Losango no prazo (dataLimite)
-      const fPrazo = frac(fimItem);
-      slide.addShape("diamond", {
-        x: chartX + chartW * fPrazo - 0.05, y: y + rowH / 2 - 0.05, w: 0.1, h: 0.1,
-        fill: { color: tl.line },
-      });
+    });
+
+    // "Estamos aqui" (linha tracejada verde na data de hoje)
+    if (hoje.getTime() >= scaleStart.getTime() && hoje.getTime() <= scaleEnd.getTime()) {
+      const hx = areaX + areaW * frac(hoje);
+      slide.addShape("line", { x: hx, y: panelY, w: 0, h: panelH + 0.15, line: { color: PPT_TL_VERDE, width: 1.5, dashType: "dash" } });
+      slide.addText("Estamos aqui", { x: hx - 0.8, y: panelY + panelH + 0.12, w: 1.6, h: 0.25, align: "center", color: PPT_TL_VERDE, fontSize: 10, bold: true, fontFace: "Arial" });
+    }
+
+    // Caixa "Deploys programados" (para preenchimento manual)
+    slide.addShape("roundRect", { x: areaX, y: 6.35, w: 6.6, h: 0.95, rectRadius: 0.06, fill: { color: "FFFFFF" }, line: { color: "D8DEE8", width: 1 } });
+    slide.addText("Deploys programados:", { x: areaX + 0.15, y: 6.42, w: 4, h: 0.25, color: "1F2937", fontSize: 11, bold: true, fontFace: "Arial" });
+    slide.addText("•", { x: areaX + 0.2, y: 6.68, w: 3, h: 0.22, color: "475569", fontSize: 10, fontFace: "Arial" });
+
+    // Legenda
+    const lx = 8.2, ly = 6.35;
+    slide.addShape("roundRect", { x: lx, y: ly, w: 4.78, h: 0.95, rectRadius: 0.06, fill: { color: "FFFFFF" }, line: { color: "D8DEE8", width: 1 } });
+    const legCores: [string, string][] = [
+      [PPT_TL_AZUL, "Desenvolvimento"],
+      [PPT_TL_LARANJA, "Homologação"],
+      [PPT_TL_CINZA, "Arquitetura/Refinamento"],
+    ];
+    legCores.forEach(([cor, label], i) => {
+      const yL = ly + 0.1 + i * 0.27;
+      slide.addShape("roundRect", { x: lx + 0.15, y: yL + 0.03, w: 0.28, h: 0.12, rectRadius: 0.03, fill: { color: cor } });
+      slide.addText(label, { x: lx + 0.5, y: yL, w: 2.2, h: 0.2, color: "334155", fontSize: 8.5, fontFace: "Arial" });
+    });
+    const legIcones: [string, string][] = [
+      ["✅", "Concluído"], ["⚠", "Impedimento"], ["💼", "Negócios"], ["⚙", "Tech"],
+    ];
+    legIcones.forEach(([ic, label], i) => {
+      const yL = ly + 0.1 + (i % 3) * 0.27;
+      const xL = lx + 2.75 + Math.floor(i / 3) * 1.1;
+      slide.addText(`${ic} ${label}`, { x: xL, y: yL, w: 1.3, h: 0.2, color: "334155", fontSize: 8.5, fontFace: "Arial" });
     });
   }
 }
