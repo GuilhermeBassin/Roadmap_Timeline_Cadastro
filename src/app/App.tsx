@@ -6,6 +6,7 @@ import {
   TrendingUp, AlertCircle, Filter,
   Activity, Link2, RotateCcw, Target,
   CheckCircle2, Clock, Users, ClipboardList,
+  FileSpreadsheet, Upload, Plug, ListOrdered,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -17,8 +18,12 @@ import {
   STATUS_CFG, PRIORIDADE_CFG, AREA_CFG,
   emAndamento, ownerColor, initialsOf, NEXT_STATUS,
   rowToFup, fupToRow,
+  CRITERIOS_PRIORIDADE, calcularPontuacao, questionarioCompleto,
 } from "./dicionario";
 import { ExportPptModal } from "./exportPpt";
+import { exportarXlsx } from "./exportXlsx";
+import { ImportXlsxModal, LinhaErro } from "./importXlsx";
+import { JiraConfigModal, syncAutomatica } from "./jira";
 
 // ─── Supabase (BASE ÚNICA do Dash — projeto do usuário, compartilhada com o
 //     Controle de Demandas) ──────────────────────────────────────────────────
@@ -96,6 +101,50 @@ function PrioridadeBadge({ prioridade }: { prioridade: Prioridade }) {
   );
 }
 
+/** "P{n} · {pts} pts" — nº único por frente + Pontuação de Prioridade.
+ *  Projetos legados sem questionário exibem "Sem prioridade". */
+function PrioridadeNumBadge({ project }: { project: FupItem }) {
+  if (project.prioridadeNum != null) {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold"
+        style={{ background: "rgba(0,51,176,0.1)", color: "#0033B0", border: "1px solid rgba(0,51,176,0.25)", fontFamily: "JetBrains Mono, monospace" }}
+        title="Nº de prioridade na frente · Pontuação de Prioridade"
+      >
+        P{project.prioridadeNum}{project.pontuacaoPrioridade != null ? ` · ${project.pontuacaoPrioridade} pts` : ""}
+      </span>
+    );
+  }
+  if (project.pontuacaoPrioridade == null) {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs" style={{ background: "rgba(148,163,184,0.12)", color: "#94A3B8" }} title="Responda o questionário de priorização na próxima edição">
+        Sem prioridade
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium" style={{ background: "rgba(0,51,176,0.08)", color: "#0033B0", fontFamily: "JetBrains Mono, monospace" }}>
+      {project.pontuacaoPrioridade} pts
+    </span>
+  );
+}
+
+/** Chip "via Jira" — status espelhado do épico vinculado + data da última sync. */
+function JiraBadge({ project }: { project: FupItem }) {
+  if (!project.jiraKey || !project.jiraSyncAt) return null;
+  const dt = new Date(project.jiraSyncAt);
+  const quando = isNaN(dt.getTime()) ? "" : ` · sync ${dt.toLocaleDateString("pt-BR")} ${dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium"
+      style={{ background: "rgba(38,132,255,0.1)", color: "#2684FF", border: "1px solid rgba(38,132,255,0.25)" }}
+      title={`${project.jiraKey}${project.jiraPrioridade ? ` · ${project.jiraPrioridade}` : ""}${quando}`}
+    >
+      via Jira{project.jiraStatus ? `: ${project.jiraStatus}` : ""}
+    </span>
+  );
+}
+
 // ─── ProgressBar ─────────────────────────────────────────────────────────────
 
 function ProgressBar({ value, color }: { value: number; color: string }) {
@@ -158,10 +207,12 @@ function ProjectCard({ project, onMove, onEdit, onDelete, onBlock, onUnblock, dr
         </button>
       </div>
 
-      {/* Tema Macro + Prioridade */}
+      {/* Tema Macro + Prioridade + P{n} + Jira */}
       <div className="flex items-center gap-1.5 flex-wrap">
         <TemaTag tema={project.temaMacro} />
         <PrioridadeBadge prioridade={project.prioridade} />
+        <PrioridadeNumBadge project={project} />
+        <JiraBadge project={project} />
       </div>
 
       {/* Progress (auxiliar Timeline) */}
@@ -532,6 +583,12 @@ function DashboardView({ projects, onCadastro }: { projects: FupItem[]; onCadast
     .sort((a, b) => new Date(a.dataLimite).getTime() - new Date(b.dataLimite).getTime())
     .slice(0, 5);
 
+  // Fila de Prioridades: nº único por frente, do P1 para baixo
+  const fila = projects
+    .filter(p => p.prioridadeNum != null)
+    .sort((a, b) => (a.prioridadeNum ?? 0) - (b.prioridadeNum ?? 0));
+  const semPrioridade = projects.filter(p => p.pontuacaoPrioridade == null && p.status !== "Concluído" && p.status !== "Cancelado").length;
+
   const chartData = counts
     .filter(c => c.count > 0)
     .map(c => ({ name: c.status, value: c.count, color: STATUS_CFG[c.status].color }));
@@ -614,8 +671,44 @@ function DashboardView({ projects, onCadastro }: { projects: FupItem[]; onCadast
         </ResponsiveContainer>
       </div>
 
-      {/* Right column: risk + upcoming */}
+      {/* Right column: fila + risk + upcoming */}
       <div className="flex flex-col gap-4">
+        {/* Fila de Prioridades (nº único por frente + pontuação) */}
+        <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid rgba(0,51,176,0.2)" }}>
+          <div className="flex items-center gap-2 mb-4">
+            <ListOrdered size={14} style={{ color: "#0033B0" }} />
+            <h3 className="text-sm font-semibold" style={{ color: "#475569", fontFamily: "Inter, sans-serif" }}>
+              Fila de Prioridades
+            </h3>
+            <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-mono" style={{ background: "rgba(0,51,176,0.1)", color: "#0033B0" }}>
+              {fila.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {fila.length === 0 ? (
+              <p className="text-xs text-center py-4" style={{ color: "#94A3B8" }}>
+                Nenhum projeto com nº de prioridade — atribua no cadastro/edição
+              </p>
+            ) : fila.map(p => (
+              <div key={p.id} className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: "rgba(0,51,176,0.04)", border: "1px solid rgba(0,51,176,0.1)" }}>
+                <span className="text-xs font-bold w-8 text-center flex-shrink-0 rounded-md py-1" style={{ background: "#0033B0", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                  P{p.prioridadeNum}
+                </span>
+                <p className="text-xs font-medium flex-1 truncate" style={{ color: "#475569" }} title={p.atividade}>{p.atividade}</p>
+                <span className="text-xs font-mono flex-shrink-0" style={{ color: "#0033B0" }}>
+                  {p.pontuacaoPrioridade != null ? `${p.pontuacaoPrioridade} pts` : "—"}
+                </span>
+                <StatusBadge status={p.status} />
+              </div>
+            ))}
+            {semPrioridade > 0 && (
+              <p className="text-xs pt-1" style={{ color: "#94A3B8" }}>
+                {semPrioridade} projeto{semPrioridade > 1 ? "s" : ""} sem prioridade (legado — classificação obrigatória na próxima edição)
+              </p>
+            )}
+          </div>
+        </div>
+
         {/* At risk */}
         <div className="rounded-xl p-5" style={{ background: "#FFFFFF", border: "1px solid rgba(239,68,68,0.2)" }}>
           <div className="flex items-center gap-2 mb-4">
@@ -701,11 +794,21 @@ function ProjectModal({ onClose, onSave, initial, defaultArea, temasMacro, orige
     linkRoadMap: initial?.linkRoadMap ?? "",
     dataInicio: initial?.dataInicio ?? "",
     progresso: initial?.progresso ?? 0,
+    impactoFinanceiro: initial?.impactoFinanceiro ?? null,
+    notaImpacto: initial?.notaImpacto ?? null,
+    dependenciaSquads: initial?.dependenciaSquads ?? null,
+    emergencial: initial?.emergencial ?? null,
+    prioridadeNum: initial?.prioridadeNum ?? null,
+    jiraKey: initial?.jiraKey ?? null,
   });
 
   function set<K extends keyof FupItem>(k: K, v: FupItem[K]) {
     setForm(f => ({ ...f, [k]: v }));
   }
+
+  // Pontuação de Prioridade calculada ao vivo (0–100)
+  const pontuacao = calcularPontuacao(form);
+  const completo = questionarioCompleto(form);
 
   function handleDynamicSelect(value: string, kind: "temaMacro" | "origem") {
     if (value === ADD_NEW) {
@@ -720,8 +823,8 @@ function ProjectModal({ onClose, onSave, initial, defaultArea, temasMacro, orige
   }
 
   function handleSave() {
-    if (!form.atividade?.trim()) return;
-    onSave(form);
+    if (!form.atividade?.trim() || !completo) return;
+    onSave({ ...form, pontuacaoPrioridade: pontuacao });
   }
 
   const inputStyle = { background: "#EEF2F7", border: "1px solid rgba(15,23,42,0.1)", color: "#1E293B", fontFamily: "Inter, sans-serif" } as const;
@@ -872,6 +975,67 @@ function ProjectModal({ onClose, onSave, initial, defaultArea, temasMacro, orige
               style={{ accentColor: "#6366F1" }}
             />
           </Field>
+
+          {/* ── Questionário de Priorização (obrigatório) ─────────────────── */}
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: "rgba(0,51,176,0.04)", border: `1px solid ${completo ? "rgba(0,51,176,0.2)" : "rgba(234,88,12,0.4)"}` }}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold" style={{ color: "#0033B0" }}>
+                Questionário de Priorização {completo ? "" : "· obrigatório para salvar"}
+              </span>
+              <span
+                className="text-xs font-bold px-2 py-0.5 rounded-md"
+                style={{ background: completo ? "#0033B0" : "rgba(148,163,184,0.15)", color: completo ? "#fff" : "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}
+              >
+                {pontuacao != null ? `${pontuacao} pts` : "— pts"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {CRITERIOS_PRIORIDADE.map(c => (
+                <Field key={String(c.campo)} label={c.rotulo}>
+                  {c.tipo === "simNao" ? (
+                    <Select
+                      value={form[c.campo] === true ? "Sim" : form[c.campo] === false ? "Não" : ""}
+                      onChange={v => set(c.campo, (v === "" ? null : v === "Sim") as any)}
+                      options={["", "Sim", "Não"]}
+                      labels={{ "": "— Selecione —" }}
+                    />
+                  ) : (
+                    <Select
+                      value={form[c.campo] == null ? "" : String(form[c.campo])}
+                      onChange={v => set(c.campo, (v === "" ? null : Number(v)) as any)}
+                      options={["", ...Array.from({ length: 11 }, (_, i) => String(i))]}
+                      labels={{ "": "— Selecione —" }}
+                    />
+                  )}
+                </Field>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Nº de Prioridade na frente (opcional)">
+                <input
+                  type="number" min={1}
+                  value={form.prioridadeNum ?? ""}
+                  onChange={e => set("prioridadeNum", (e.target.value === "" ? null : Math.max(1, Number(e.target.value))) as any)}
+                  placeholder="1, 2, 3…"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none font-mono"
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="Chave Jira (Épico)">
+                <input
+                  value={form.jiraKey ?? ""}
+                  onChange={e => set("jiraKey", e.target.value.toUpperCase() as any)}
+                  placeholder="ROADMAP-2058"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none font-mono"
+                  style={inputStyle}
+                />
+              </Field>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: "#94A3B8" }}>
+              Um projeto por número dentro de cada frente. Se o número já estiver ocupado,
+              o projeto atual e os abaixo dele caem uma posição (você confirma antes).
+            </p>
+          </div>
         </div>
 
         {/* Actions */}
@@ -885,7 +1049,8 @@ function ProjectModal({ onClose, onSave, initial, defaultArea, temasMacro, orige
           </button>
           <button
             onClick={handleSave}
-            disabled={!form.atividade?.trim()}
+            disabled={!form.atividade?.trim() || !completo}
+            title={completo ? "" : "Responda o questionário de priorização para salvar"}
             className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-40"
             style={{ background: "#6366F1", color: "#FFFFFF" }}
           >
@@ -1011,7 +1176,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadAll();
+    loadAll().then(() => {
+      // Sync automática com o Jira (silenciosa, no máx. a cada 30 min):
+      // busca os projetos direto do banco para não depender do state
+      supabase.from("fup_items").select("*").then(({ data }) => {
+        if (data?.length) syncAutomatica(supabase, SUPABASE_URL, SUPABASE_ANON_KEY, data.map(rowToFup));
+      });
+    });
 
     // Sincronização em tempo real: alterações feitas no Controle de Demandas
     // (ou em outra aba) refletem aqui automaticamente.
@@ -1058,6 +1229,8 @@ export default function App() {
   const [editProject, setEditProject] = useState<FupItem | null>(null);
   const [blockProject, setBlockProject] = useState<FupItem | null>(null);
   const [pptOpen, setPptOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [jiraOpen, setJiraOpen] = useState(false);
 
   const areaProjects = useMemo(() => projects.filter(p => p.area === area), [projects, area]);
 
@@ -1081,10 +1254,43 @@ export default function App() {
     persistUpdate(id, { status: "Desenv. Técnico", resumo_status: "" });
   }
 
-  function deleteProject(id: string) {
+  async function deleteProject(id: string) {
+    const areaDoProjeto = projects.find(p => p.id === id)?.area;
     setProjects(ps => ps.filter(p => p.id !== id));
-    supabase.from("fup_items").delete().eq("id", id)
-      .then(({ error }) => { if (error) console.error("Erro ao excluir no Supabase:", error); });
+    const { error } = await supabase.from("fup_items").delete().eq("id", id);
+    if (error) { console.error("Erro ao excluir no Supabase:", error); return; }
+    // Exclusão compacta a fila da frente (1..k sem buracos)
+    if (areaDoProjeto) {
+      const { error: e2 } = await supabase.rpc("compactar_prioridades", { p_area: areaDoProjeto });
+      if (e2) console.error("Erro ao compactar prioridades:", e2);
+      loadAll();
+    }
+  }
+
+  /** Aplica o nº de prioridade via RPC atômica (NUNCA grava prioridade_num
+   *  direto). Se o nº já está ocupado por outro projeto da frente, pop-up
+   *  informa qual projeto deixa de ser o N; ao confirmar, ele e todos
+   *  abaixo caem uma posição. */
+  async function aplicarPrioridadeNum(id: string, areaAlvo: Area, novoNum: number | null, areaAnterior?: Area) {
+    if (novoNum != null) {
+      const ocupante = projects.find(p => p.id !== id && p.area === areaAlvo && p.prioridadeNum === novoNum);
+      if (ocupante) {
+        const ok = window.confirm(
+          `O nº P${novoNum} da frente ${areaAlvo} já pertence a "${ocupante.atividade}".\n\n` +
+          `Ao confirmar, "${ocupante.atividade}" deixa de ser o P${novoNum} e cai para P${novoNum + 1} — ` +
+          `e todos os projetos abaixo dele também caem uma posição (sem buracos nem duplicidades).\n\nConfirmar remanejamento?`
+        );
+        if (!ok) return; // mantém a numeração atual
+      }
+    }
+    const { error } = await supabase.rpc("definir_prioridade", { p_id: id, p_num: novoNum });
+    if (error) { console.error("Erro ao definir prioridade:", error); alert(`Erro ao definir o nº de prioridade: ${error.message}`); }
+    if (areaAnterior && areaAnterior !== areaAlvo) {
+      // troca de frente compacta a fila da frente antiga
+      const { error: e2 } = await supabase.rpc("compactar_prioridades", { p_area: areaAnterior });
+      if (e2) console.error("Erro ao compactar frente anterior:", e2);
+    }
+    loadAll();
   }
 
   async function saveProject(data: Partial<FupItem>) {
@@ -1092,7 +1298,12 @@ export default function App() {
       const merged = { ...editProject, ...data };
       setProjects(ps => ps.map(p => p.id === editProject.id ? merged : p));
       setEditProject(null);
-      persistUpdate(editProject.id, fupToRow(merged));
+      await persistUpdate(editProject.id, fupToRow(merged));
+      const numMudou = (data.prioridadeNum ?? null) !== (editProject.prioridadeNum ?? null);
+      const areaMudou = merged.area !== editProject.area;
+      if (numMudou || areaMudou) {
+        await aplicarPrioridadeNum(editProject.id, merged.area as Area, data.prioridadeNum ?? null, editProject.area);
+      }
     } else {
       setCreateOpen(false);
       const { data: inserted, error } = await supabase
@@ -1103,7 +1314,24 @@ export default function App() {
         return;
       }
       setProjects(ps => [...ps, rowToFup(inserted)]);
+      if (data.prioridadeNum != null) {
+        await aplicarPrioridadeNum(inserted.id, (data.area ?? area) as Area, data.prioridadeNum);
+      }
     }
+  }
+
+  /** Importação .xlsx: cada linha válida vira um projeto novo; erros de banco
+   *  não interrompem as demais linhas e voltam com o nº da linha. */
+  async function importarProjetos(itens: { linha: number; item: Partial<FupItem> }[]) {
+    let criados = 0;
+    const errosDb: LinhaErro[] = [];
+    for (const { linha, item } of itens) {
+      const { error } = await supabase.from("fup_items").insert(fupToRow(item));
+      if (error) errosDb.push({ linha, motivo: `Erro do banco: ${error.message}` });
+      else criados++;
+    }
+    if (criados) loadAll();
+    return { criados, errosDb };
   }
 
   function blockConfirm(id: string, reason: string) {
@@ -1207,6 +1435,36 @@ export default function App() {
           }}
         >
           <Filter size={13} /> Filtros
+        </button>
+
+        {/* Jira */}
+        <button
+          onClick={() => setJiraOpen(true)}
+          title="Conexão com o Jira (Agibank)"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: "rgba(38,132,255,0.1)", color: "#2684FF", border: "1px solid rgba(38,132,255,0.3)" }}
+        >
+          <Plug size={13} /> Jira
+        </button>
+
+        {/* Importar .xlsx */}
+        <button
+          onClick={() => setImportOpen(true)}
+          title="Importar projetos via planilha .xlsx"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: "rgba(15,23,42,0.05)", color: "#475569", border: "1px solid rgba(15,23,42,0.1)" }}
+        >
+          <Upload size={13} /> Importar
+        </button>
+
+        {/* Exportar .xlsx (todos os projetos, campos completos) */}
+        <button
+          onClick={() => exportarXlsx(projects)}
+          title="Exportar todos os projetos para Excel (.xlsx)"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
+          style={{ background: "rgba(16,185,129,0.1)", color: "#059669", border: "1px solid rgba(16,185,129,0.3)" }}
+        >
+          <FileSpreadsheet size={13} /> Excel
         </button>
 
         {/* Exportar PPT */}
@@ -1316,6 +1574,15 @@ export default function App() {
       )}
       {pptOpen && (
         <ExportPptModal projects={areaProjects} area={area} onClose={() => setPptOpen(false)} />
+      )}
+      {importOpen && (
+        <ImportXlsxModal onClose={() => setImportOpen(false)} onImport={importarProjetos} />
+      )}
+      {jiraOpen && (
+        <JiraConfigModal
+          supabase={supabase} supabaseUrl={SUPABASE_URL} anonKey={SUPABASE_ANON_KEY}
+          projects={projects} onClose={() => setJiraOpen(false)} onSynced={() => loadAll()}
+        />
       )}
     </div>
   );

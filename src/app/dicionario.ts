@@ -34,6 +34,18 @@ export interface FupItem {
   // Auxiliares (fora do dicionário; usados só para desenho da Timeline/Gantt)
   dataInicio?: string;
   progresso?: number;
+  // ── Priorização (questionário obrigatório no cadastro/edição) ─────────────
+  impactoFinanceiro?: boolean | null;   // Sim/Não
+  notaImpacto?: number | null;          // 0–10
+  dependenciaSquads?: boolean | null;   // Sim/Não (diminui a prioridade)
+  emergencial?: boolean | null;         // Sim/Não
+  pontuacaoPrioridade?: number | null;  // 0–100 (calculada)
+  prioridadeNum?: number | null;        // nº único por frente (1, 2, 3…)
+  // ── Integração Jira ───────────────────────────────────────────────────────
+  jiraKey?: string | null;              // ex.: ROADMAP-2058
+  jiraStatus?: string | null;           // status atual do épico no Jira
+  jiraPrioridade?: string | null;       // ex.: "2 - Estratégico"
+  jiraSyncAt?: string | null;           // ISO timestamp da última sincronização
 }
 
 export const AREAS: Area[] = ['Cadastro', 'Conta Corrente', 'APP'];
@@ -65,6 +77,47 @@ export const OWNERS = [
   'Maiune', 'Luke', 'Juliana', 'Cristiane', 'Felipe', 'Dionathan',
   'Guilherme', 'Leticia', 'Bruno', 'Pedro', 'Welligton',
 ];
+
+// ── Priorização ─────────────────────────────────────────────────────────────
+// Pontuação de Prioridade (0–100) calculada pelo questionário obrigatório.
+// Para adicionar um critério novo: incluir uma entrada aqui E criar a coluna
+// homônima (snake_case) em `fup_items` — o formulário, o cálculo e a
+// persistência se adaptam sozinhos.
+
+export interface CriterioPrioridade {
+  campo: keyof FupItem;        // campo camelCase no FupItem
+  coluna: string;              // coluna snake_case no banco
+  rotulo: string;              // texto exibido no formulário
+  tipo: 'simNao' | 'nota';     // Sim/Não ou nota 0–10
+  peso: number;                // simNao: pontos se "Sim" · nota: multiplicador
+}
+
+export const CRITERIOS_PRIORIDADE: CriterioPrioridade[] = [
+  { campo: 'impactoFinanceiro', coluna: 'impacto_financeiro', rotulo: 'Impacto Financeiro',            tipo: 'simNao', peso: 25 },
+  { campo: 'notaImpacto',       coluna: 'nota_impacto',       rotulo: 'Nota do Impacto (0–10)',        tipo: 'nota',   peso: 4 },
+  { campo: 'dependenciaSquads', coluna: 'dependencia_squads', rotulo: 'Dependência de demais squads',  tipo: 'simNao', peso: -10 }, // dependência DIMINUI a prioridade
+  { campo: 'emergencial',       coluna: 'emergencial',        rotulo: 'Emergencial',                   tipo: 'simNao', peso: 25 },
+];
+
+/** Questionário completo? (todos os critérios respondidos) */
+export function questionarioCompleto(p: Partial<FupItem>): boolean {
+  return CRITERIOS_PRIORIDADE.every(c => {
+    const v = p[c.campo];
+    return v !== null && v !== undefined && v !== ('' as any);
+  });
+}
+
+/** Pontuação de Prioridade 0–100 a partir das respostas (null se incompleto). */
+export function calcularPontuacao(p: Partial<FupItem>): number | null {
+  if (!questionarioCompleto(p)) return null;
+  let pts = 0;
+  for (const c of CRITERIOS_PRIORIDADE) {
+    const v = p[c.campo];
+    if (c.tipo === 'nota') pts += Number(v) * c.peso;
+    else if (v === true) pts += c.peso;
+  }
+  return Math.max(0, Math.min(100, Math.round(pts)));
+}
 
 // ── Apresentação ────────────────────────────────────────────────────────────
 
@@ -143,6 +196,16 @@ export function rowToFup(row: any): FupItem {
     linkRoadMap: row.link_roadmap ?? '',
     dataInicio: row.data_inicio ?? '',
     progresso: row.progresso ?? 0,
+    impactoFinanceiro: row.impacto_financeiro ?? null,
+    notaImpacto: row.nota_impacto ?? null,
+    dependenciaSquads: row.dependencia_squads ?? null,
+    emergencial: row.emergencial ?? null,
+    pontuacaoPrioridade: row.pontuacao_prioridade ?? null,
+    prioridadeNum: row.prioridade_num ?? null,
+    jiraKey: row.jira_key ?? null,
+    jiraStatus: row.jira_status ?? null,
+    jiraPrioridade: row.jira_prioridade ?? null,
+    jiraSyncAt: row.jira_sync_at ?? null,
   };
 }
 
@@ -163,5 +226,17 @@ export function fupToRow(p: Partial<FupItem>) {
   if (p.linkRoadMap !== undefined) row.link_roadmap = p.linkRoadMap;
   if (p.dataInicio !== undefined) row.data_inicio = p.dataInicio || null;
   if (p.progresso !== undefined) row.progresso = p.progresso;
+  // Priorização (critérios dinâmicos + pontuação; prioridade_num NUNCA é
+  // gravado direto — sempre via RPC definir_prioridade/compactar_prioridades)
+  for (const c of CRITERIOS_PRIORIDADE) {
+    const v = p[c.campo];
+    if (v !== undefined) row[c.coluna] = v;
+  }
+  if (p.pontuacaoPrioridade !== undefined) row.pontuacao_prioridade = p.pontuacaoPrioridade;
+  // Jira
+  if (p.jiraKey !== undefined) row.jira_key = p.jiraKey || null;
+  if (p.jiraStatus !== undefined) row.jira_status = p.jiraStatus || null;
+  if (p.jiraPrioridade !== undefined) row.jira_prioridade = p.jiraPrioridade || null;
+  if (p.jiraSyncAt !== undefined) row.jira_sync_at = p.jiraSyncAt || null;
   return row;
 }
