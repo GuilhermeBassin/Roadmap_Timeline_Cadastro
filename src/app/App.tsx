@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { createClient } from "@supabase/supabase-js";
 import {
   Plus, ChevronRight, AlertTriangle, Trash2, Edit3,
   LayoutGrid, BarChart3, Search, X,
@@ -24,19 +23,15 @@ import { ExportPptModal } from "./exportPpt";
 import { exportarXlsx } from "./exportXlsx";
 import { ImportXlsxModal, LinhaErro } from "./importXlsx";
 import { JiraConfigModal, syncAutomatica } from "./jira";
+import { api } from "./api";
+import { ControleDemandas } from "./controleDemandas";
 
-// ─── Supabase (BASE ÚNICA do Dash — projeto do usuário, compartilhada com o
-//     Controle de Demandas) ──────────────────────────────────────────────────
+// ─── BASE ÚNICA: Neon (Postgres) via API Routes da Vercel (/api/db).
+//     O browser nunca fala com o banco direto — ver src/app/api.ts. ─────────
 
-const SUPABASE_URL =
-  (import.meta as any).env?.VITE_SUPABASE_URL ?? "https://hrfcmlqhgxzwjhnwawvc.supabase.co";
-const SUPABASE_ANON_KEY =
-  (import.meta as any).env?.VITE_SUPABASE_ANON_KEY ??
-  "sb_publishable_vu9hGerEQY1IMrZ-kNpOBQ_AH_okmx3";
+const POLL_MS = 30_000; // sem realtime no Neon: polling a cada 30s
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-type View = "roadmap" | "timeline" | "dashboard";
+type View = "roadmap" | "timeline" | "dashboard" | "demandas";
 
 const KANBAN_COLS: FupStatus[] = [...FUP_STATUSES];
 
@@ -1155,20 +1150,15 @@ export default function App() {
 
   async function loadAll() {
     try {
-      const [{ data: rows, error: pErr }, { data: listas, error: lErr }] = await Promise.all([
-        supabase.from("fup_items").select("*").order("created_at", { ascending: true }),
-        supabase.from("listas").select("*"),
-      ]);
-      if (pErr) throw pErr;
-      if (lErr) throw lErr;
+      const [rows, listas] = await Promise.all([api.fupList(), api.listasList()]);
       setProjects((rows ?? []).map(rowToFup));
-      const temas = (listas ?? []).filter((l: any) => l.tipo === "temaMacro").map((l: any) => l.valor);
-      const orgs = (listas ?? []).filter((l: any) => l.tipo === "origem").map((l: any) => l.valor);
+      const temas = (listas ?? []).filter(l => l.tipo === "temaMacro").map(l => l.valor);
+      const orgs = (listas ?? []).filter(l => l.tipo === "origem").map(l => l.valor);
       if (temas.length) setTemasMacro(temas);
       if (orgs.length) setOrigens(orgs);
       setLoadError(null);
     } catch (e: any) {
-      console.error("Erro ao carregar dados do Supabase:", e);
+      console.error("Erro ao carregar dados do banco:", e);
       setLoadError(e?.message ?? "Erro ao conectar ao banco de dados");
     } finally {
       setLoading(false);
@@ -1177,25 +1167,20 @@ export default function App() {
 
   useEffect(() => {
     loadAll().then(() => {
-      // Sync automática com o Jira (silenciosa, no máx. a cada 30 min):
-      // busca os projetos direto do banco para não depender do state
-      supabase.from("fup_items").select("*").then(({ data }) => {
-        if (data?.length) syncAutomatica(supabase, SUPABASE_URL, SUPABASE_ANON_KEY, data.map(rowToFup));
-      });
+      // Sync automática com o Jira (silenciosa, no máx. a cada 30 min)
+      api.fupList()
+        .then(rows => { if (rows?.length) syncAutomatica(rows.map(rowToFup)); })
+        .catch(() => {});
     });
 
-    // Sincronização em tempo real: alterações feitas no Controle de Demandas
-    // (ou em outra aba) refletem aqui automaticamente.
-    const channel = supabase
-      .channel("dash-sync")
-      .on("postgres_changes", { event: "*", schema: "public", table: "fup_items" }, () => loadAll())
-      .on("postgres_changes", { event: "*", schema: "public", table: "listas" }, () => loadAll())
-      .subscribe();
+    // Sem realtime no Neon: polling para refletir alterações de outras
+    // abas/pessoas (mutações locais já recarregam na hora)
+    const poll = setInterval(loadAll, POLL_MS);
 
     const onHash = () => setArea(areaFromHash());
     window.addEventListener("hashchange", onHash);
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(poll);
       window.removeEventListener("hashchange", onHash);
     };
   }, []);
@@ -1207,15 +1192,15 @@ export default function App() {
   }
 
   async function persistUpdate(id: string, fields: Record<string, any>) {
-    const { error } = await supabase.from("fup_items").update(fields).eq("id", id);
-    if (error) console.error("Erro ao salvar no Supabase:", error);
+    try { await api.fupUpdate(id, fields); }
+    catch (e) { console.error("Erro ao salvar no banco:", e); }
   }
 
   async function addLista(tipo: "temaMacro" | "origem", valor: string) {
     if (tipo === "temaMacro") setTemasMacro(ts => ts.includes(valor) ? ts : [...ts, valor]);
     else setOrigens(os => os.includes(valor) ? os : [...os, valor]);
-    const { error } = await supabase.from("listas").upsert({ tipo, valor }, { onConflict: "tipo,valor" });
-    if (error) console.error("Erro ao salvar lista:", error);
+    try { await api.listasUpsert(tipo, valor); }
+    catch (e) { console.error("Erro ao salvar lista:", e); }
   }
 
   const [view, setView] = useState<View>("roadmap");
@@ -1257,14 +1242,12 @@ export default function App() {
   async function deleteProject(id: string) {
     const areaDoProjeto = projects.find(p => p.id === id)?.area;
     setProjects(ps => ps.filter(p => p.id !== id));
-    const { error } = await supabase.from("fup_items").delete().eq("id", id);
-    if (error) { console.error("Erro ao excluir no Supabase:", error); return; }
-    // Exclusão compacta a fila da frente (1..k sem buracos)
-    if (areaDoProjeto) {
-      const { error: e2 } = await supabase.rpc("compactar_prioridades", { p_area: areaDoProjeto });
-      if (e2) console.error("Erro ao compactar prioridades:", e2);
+    try {
+      await api.fupDelete(id);
+      // Exclusão compacta a fila da frente (1..k sem buracos)
+      if (areaDoProjeto) await api.compactarPrioridades(areaDoProjeto);
       loadAll();
-    }
+    } catch (e) { console.error("Erro ao excluir:", e); }
   }
 
   /** Aplica o nº de prioridade via RPC atômica (NUNCA grava prioridade_num
@@ -1283,12 +1266,13 @@ export default function App() {
         if (!ok) return; // mantém a numeração atual
       }
     }
-    const { error } = await supabase.rpc("definir_prioridade", { p_id: id, p_num: novoNum });
-    if (error) { console.error("Erro ao definir prioridade:", error); alert(`Erro ao definir o nº de prioridade: ${error.message}`); }
-    if (areaAnterior && areaAnterior !== areaAlvo) {
+    try {
+      await api.definirPrioridade(id, novoNum);
       // troca de frente compacta a fila da frente antiga
-      const { error: e2 } = await supabase.rpc("compactar_prioridades", { p_area: areaAnterior });
-      if (e2) console.error("Erro ao compactar frente anterior:", e2);
+      if (areaAnterior && areaAnterior !== areaAlvo) await api.compactarPrioridades(areaAnterior);
+    } catch (e: any) {
+      console.error("Erro ao definir prioridade:", e);
+      alert(`Erro ao definir o nº de prioridade: ${e?.message ?? e}`);
     }
     loadAll();
   }
@@ -1306,10 +1290,11 @@ export default function App() {
       }
     } else {
       setCreateOpen(false);
-      const { data: inserted, error } = await supabase
-        .from("fup_items").insert(fupToRow(data)).select().single();
-      if (error || !inserted) {
-        console.error("Erro ao criar projeto no Supabase:", error);
+      let inserted: any;
+      try {
+        inserted = await api.fupInsert(fupToRow(data));
+      } catch (e) {
+        console.error("Erro ao criar projeto:", e);
         alert("Erro ao salvar o projeto no banco de dados. Tente novamente.");
         return;
       }
@@ -1326,9 +1311,8 @@ export default function App() {
     let criados = 0;
     const errosDb: LinhaErro[] = [];
     for (const { linha, item } of itens) {
-      const { error } = await supabase.from("fup_items").insert(fupToRow(item));
-      if (error) errosDb.push({ linha, motivo: `Erro do banco: ${error.message}` });
-      else criados++;
+      try { await api.fupInsert(fupToRow(item)); criados++; }
+      catch (e: any) { errosDb.push({ linha, motivo: `Erro do banco: ${e?.message ?? e}` }); }
     }
     if (criados) loadAll();
     return { criados, errosDb };
@@ -1348,6 +1332,7 @@ export default function App() {
     { id: "roadmap",   label: "Roadmap",  icon: <LayoutGrid size={14} /> },
     { id: "timeline",  label: "Timeline", icon: <BarChart3 size={14} /> },
     { id: "dashboard", label: "Controle de Vertical", icon: <Activity size={14} /> },
+    { id: "demandas",  label: "Demandas", icon: <ClipboardList size={14} /> },
   ];
 
   const hasActiveFilters = filterTema !== "all" || filterOrigem !== "all" || filterStatus !== "all" || filterPrioridade !== "all" || search;
@@ -1543,6 +1528,13 @@ export default function App() {
             <DashboardView projects={filtered} onCadastro={() => setCreateOpen(true)} />
           </div>
         )}
+        {view === "demandas" && (
+          <div className="h-full overflow-y-auto rounded-xl" style={{ background: "#FFFFFF", border: "1px solid rgba(15,23,42,0.07)" }}>
+            {/* Controle de Demandas (CC, Cadastro & APP) — versão integrada:
+                fup_items no banco (fonte única) + demais dados no kv_store */}
+            <ControleDemandas onDataChanged={loadAll} />
+          </div>
+        )}
       </main>
 
       {/* Modals (fluxo de cadastro de projetos — único para todas as telas) */}
@@ -1579,10 +1571,7 @@ export default function App() {
         <ImportXlsxModal onClose={() => setImportOpen(false)} onImport={importarProjetos} />
       )}
       {jiraOpen && (
-        <JiraConfigModal
-          supabase={supabase} supabaseUrl={SUPABASE_URL} anonKey={SUPABASE_ANON_KEY}
-          projects={projects} onClose={() => setJiraOpen(false)} onSynced={() => loadAll()}
-        />
+        <JiraConfigModal projects={projects} onClose={() => setJiraOpen(false)} onSynced={() => loadAll()} />
       )}
     </div>
   );
