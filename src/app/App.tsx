@@ -1344,9 +1344,12 @@ export default function App() {
       <header className="flex-shrink-0 border-b px-6 py-3 flex items-center gap-4" style={{ borderColor: "rgba(15,23,42,0.07)", background: "#FFFFFF" }}>
         {/* Brand */}
         <div className="flex items-center gap-3 pr-6 border-r" style={{ borderColor: "rgba(15,23,42,0.07)" }}>
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `linear-gradient(135deg,${AREA_CFG[area].color},#8B5CF6)` }}>
-            <Target size={16} className="text-white" />
-          </div>
+          <img
+            src="/logo-agi.png"
+            alt="Agi"
+            className="w-9 h-9 flex-shrink-0"
+            style={{ borderRadius: 10, boxShadow: "0 2px 8px rgba(0,51,176,0.25)" }}
+          />
           <div>
             <p className="text-sm font-bold leading-tight" style={{ color: "#1E293B" }}>Vertical {area}</p>
             <p className="text-xs leading-tight" style={{ color: "#94A3B8" }}>Agibank · Dash Unificado</p>
@@ -1370,22 +1373,37 @@ export default function App() {
           ))}
         </div>
 
-        {/* View switcher */}
-        <div className="flex items-center gap-1 rounded-xl p-1" style={{ background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.06)" }}>
-          {VIEWS.map(v => (
-            <button
-              key={v.id}
-              onClick={() => setView(v.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 whitespace-nowrap"
-              style={{
-                background: view === v.id ? "#EEF2F7" : "transparent",
-                color: view === v.id ? "#1E293B" : "#94A3B8",
-                border: view === v.id ? "1px solid rgba(15,23,42,0.1)" : "1px solid transparent",
-              }}
-            >
-              {v.icon} {v.label}
-            </button>
-          ))}
+        {/* View switcher — Demandas em destaque na primeira linha, maior;
+            Roadmap/Timeline/Controle de Vertical embaixo */}
+        <div className="flex flex-col gap-1 rounded-xl p-1" style={{ background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.06)" }}>
+          <button
+            onClick={() => setView("demandas")}
+            className="flex items-center justify-center gap-2 w-full px-4 py-1.5 rounded-lg text-sm font-bold transition-all duration-150 whitespace-nowrap"
+            style={{
+              background: view === "demandas" ? "#0033B0" : "rgba(0,51,176,0.08)",
+              color: view === "demandas" ? "#FFFFFF" : "#0033B0",
+              border: `1px solid ${view === "demandas" ? "#0033B0" : "rgba(0,51,176,0.25)"}`,
+              boxShadow: view === "demandas" ? "0 2px 10px rgba(0,51,176,0.35)" : "none",
+            }}
+          >
+            <ClipboardList size={15} /> Demandas
+          </button>
+          <div className="flex items-center gap-1">
+            {VIEWS.filter(v => v.id !== "demandas").map(v => (
+              <button
+                key={v.id}
+                onClick={() => setView(v.id)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-150 whitespace-nowrap"
+                style={{
+                  background: view === v.id ? "#EEF2F7" : "transparent",
+                  color: view === v.id ? "#1E293B" : "#94A3B8",
+                  border: view === v.id ? "1px solid rgba(15,23,42,0.1)" : "1px solid transparent",
+                }}
+              >
+                {v.icon} {v.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Quick stats */}
