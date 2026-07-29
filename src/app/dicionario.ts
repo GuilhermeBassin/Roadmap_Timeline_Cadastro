@@ -178,6 +178,13 @@ export const NEXT_STATUS: Partial<Record<FupStatus, FupStatus>> = {
 
 // ── Mapeamento linha do banco (snake_case) ⇄ FupItem (camelCase) ────────────
 
+/** Normaliza datas vindas do banco: o driver serializa DATE como ISO
+ *  completo ("2026-05-07T00:00:00.000Z") — o app usa só "yyyy-mm-dd". */
+function d10(v: any): string {
+  if (!v) return '';
+  return String(v).slice(0, 10);
+}
+
 export function rowToFup(row: any): FupItem {
   return {
     id: row.id,
@@ -190,11 +197,11 @@ export function rowToFup(row: any): FupItem {
     resumoStatus: row.resumo_status ?? '',
     focal: row.focal ?? '',
     prioridade: (row.prioridade as Prioridade) ?? 'Médio',
-    dataLimite: row.data_limite ?? '',
+    dataLimite: d10(row.data_limite),
     dependencias: row.dependencias ?? '',
     linkUX: row.link_ux ?? '',
     linkRoadMap: row.link_roadmap ?? '',
-    dataInicio: row.data_inicio ?? '',
+    dataInicio: d10(row.data_inicio),
     progresso: row.progresso ?? 0,
     impactoFinanceiro: row.impacto_financeiro ?? null,
     notaImpacto: row.nota_impacto ?? null,
